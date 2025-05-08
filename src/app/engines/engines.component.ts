@@ -121,7 +121,7 @@ export class EnginesComponent {
   }
 
   /**
-   * Initiates the termination of the currently represented Process Instnace 
+   * Initiates the termination of the currently represented Process Instance 
    * Should not be called when 'this.currentProcessId' is undefined or invalid (so when the delete button is hided) 
    */
   onDeleteProcess() {

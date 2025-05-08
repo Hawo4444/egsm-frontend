@@ -2,7 +2,7 @@ import { Injectable, Output } from '@angular/core';
 import { Subject } from 'rxjs';
 import { webSocket } from 'rxjs/webSocket';
 
-const API_ENDPOINT = 'ws://localhost:8080'
+const API_ENDPOINT = 'ws://localhost:8081'
 const API_PROTOCOL = 'data-connection'
 
 @Injectable({

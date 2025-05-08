@@ -98,7 +98,7 @@ export interface BpmnBlockOverlayReport {
     perspective: string
     block_id: string
     color: Color
-    flags: string[]
+    flags: { deviation: string, details: any }[]
 }
 
 export interface Color {

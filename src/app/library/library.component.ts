@@ -75,7 +75,7 @@ export class LibraryComponent implements AfterViewInit {
   }
 
   /**
-   * Opens a NewProcessInstanceDialogComponent where the user can provide details of the new Process instnace
+   * Opens a NewProcessInstanceDialogComponent where the user can provide details of the new Process instance
    * @param process_type_name Name of the process type requested to create
    */
   openNewProcessInstanceDialog(process_type_name: string) {

@@ -18,11 +18,12 @@ import { BpmnBlockOverlayReport, Color, ProcessPerspectiveStatistic } from '../p
 @Component({
   selector: 'app-bpmn',
   templateUrl: './bpmn.component.html',
-  styleUrls: ['./bpmn.component.scss']
+  styleUrls: ['./bpmn.component.scss'],
 })
 
 export class BpmnComponent implements AfterContentInit, OnDestroy {
   bpmnJS: BpmnModeler = undefined //The BPMN Modeller instance
+  elementNamesMap = new Map<string, string>();
 
   @ViewChild('ref', { static: true }) private el: ElementRef;
 
@@ -44,6 +45,7 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
     this.bpmnJS.attachTo(this.el.nativeElement);
     if (this.model_xml) {
       this.updateModelXml(this.model_xml)
+      this.populateElementNames()
     }
 
     var eventBus = this.bpmnJS.get('eventBus'); //Eventbus to receive diagram events
@@ -115,6 +117,19 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
     }
   }
 
+  populateElementNames(): void {
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(this.model_xml, 'application/xml');
+    const elements = xmlDoc.querySelectorAll('[id]');
+    elements.forEach(element => {
+      const id = element.getAttribute('id');
+      const name = element.getAttribute('name') || '';
+      if (id) {
+        this.elementNamesMap.set(id, name);
+      }
+    });
+  }
+
   /**
    * Apply a list of BpmnBlockOverlayReport-s on the diagram
    * The function iterates through all reports in the 'overlayreport' attribute and applies its content on the diagram
@@ -132,25 +147,23 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
           this.blockProperties.get(element.block_id).color = element.color
         }
         this.blockProperties.get(element.block_id).flags.forEach(flag => {
-          if (!element.flags.includes(flag)) {
-            //Remove flag, since it is not longer part of the report
-            overlay.remove(this.visibleOverlays.get(element.block_id + flag))
-            this.visibleOverlays.delete(element.block_id + flag)
-            this.blockProperties.get(element.block_id).flags.delete(flag)
+          if (!element.flags.some(f => f.deviation === flag)) {
+            // Remove flag since it's no longer part of the report
+            overlay.remove(this.visibleOverlays.get(element.block_id + flag));
+            this.visibleOverlays.delete(element.block_id + flag);
+            this.blockProperties.get(element.block_id).flags.delete(flag);
           }
         })
         element.flags.forEach(flag => {
-          if (!this.visibleOverlays.has(element.block_id + "_" + flag)) {
-            this.addFlagToOverlay(element.block_id, flag)
+          if (!this.visibleOverlays.has(element.block_id + "_" + flag.deviation)) {
+            this.addFlagToOverlay(element.block_id, flag);
           }
         });
-
-      }
-      else {
-        this.blockProperties.set(element.block_id, { color: element.color, flags: new Set(element.flags) })
-        this.setBlockColor(element.block_id, element.color)
+      } else {
+        this.blockProperties.set(element.block_id, { color: element.color, flags: new Set(element.flags.map(f => f.deviation)) });
+        this.setBlockColor(element.block_id, element.color);
         element.flags.forEach(flag => {
-          this.addFlagToOverlay(element.block_id, flag)
+          this.addFlagToOverlay(element.block_id, flag);
         });
       }
     });
@@ -162,7 +175,7 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
    * @param elementId Id of the block the flag should be added to
    * @param flag Type of the flag
    */
-  addFlagToOverlay(elementId: string, flag: string) {
+  addFlagToOverlay(elementId: string, flag: { deviation: string, details: any }) {
     var overlay = this.bpmnJS.get('overlays');
     var flagNumber = 0
     for (const [key, value] of this.visibleOverlays.entries()) {
@@ -171,12 +184,16 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
       }
     }
 
-    switch (flag) {
+    switch (flag.deviation) {
       case 'INCOMPLETE':
         var html = `<img width="25" height="25" src="assets/hazard.png"> `
         break;
-      case 'MULTI_EXECUTION':
+      /*case 'MULTI_EXECUTION':
         var html = `<img width="25" height="25" src="assets/repeat.png"> `
+        break*/
+      case 'MULTI_EXECUTION':
+        const count = flag.details?.count ?? '?'
+        var html = `<img width="25" height="25" src="assets/repeat.png" title="Executions: ${count}">`
         break
       case 'INCORRECT_EXECUTION':
         var html = `<img width="25" height="25" src="assets/cross.png"> `
@@ -186,7 +203,11 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
         break
       case 'SKIPPED':
         var html = `<img width="25" height="25" src="assets/skip.webp"> `
-        break;
+        break
+      case 'OVERLAP':
+        const over = flag.details?.over?.map(id => this.getElementNameById(id))?.join("<br>") ?? '?';
+        var html = `<img src="assets/arrows.png" title="Overlaps:\n ${over}" style="transform: rotate(90deg); width:25px; height:25px;"> `;
+        break
     }
     this.visibleOverlays.set(elementId + "_" + flag, overlay.add(elementId, {
       position: {
@@ -230,6 +251,10 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
     else {
       modeling.setColor([element], { stroke: color.stroke, fill: color.fill });
     }
+  }
+
+  getElementNameById(elementId: string): string {
+    return this.elementNamesMap.get(elementId) || 'Element not found';
   }
 
   ngOnDestroy(): void {
