@@ -35,7 +35,7 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
   blockStatistics = new Map() //Containing statistics for block (Block name -> {Statistics})
   blockProperties = new Map() //Block name -> {BpmnBlockOverlayReport}
 
-  visibleOverlays = new Map() //Block name where the overlay attached to AND/OR unique role ID (e.g.: 'statisctic-overlay') -> Library generated Overlay ID (needed to make possible removals)
+  visibleOverlays = new Map() //Block name where the overlay attached to AND/OR unique role ID (e.g.: 'statistic-overlay') -> Library generated Overlay ID (needed to make possible removals)
   flagCounts = new Map();
 
   constructor() {
@@ -556,7 +556,29 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
    * @returns Boolean indicating if this is a loop gateway
    */
   isLoopGateway(gateway: any): boolean {
-    return gateway?.type === 'bpmn:ExclusiveGateway' && gateway?.incoming?.length === 2 && gateway?.outgoing?.length === 1
+    if (!gateway || gateway.type !== 'bpmn:ExclusiveGateway') 
+      return false
+    if (!gateway.outgoing || gateway.outgoing.length !== 1) 
+      return false
+
+    const forwardBranch = gateway.outgoing[0]?.target;
+    if (!forwardBranch || !forwardBranch.outgoing || forwardBranch.outgoing.length !== 1) 
+      return false
+
+    const secondGateway = forwardBranch.outgoing[0]?.target;
+    if (!secondGateway || secondGateway.type !== 'bpmn:ExclusiveGateway' || !secondGateway.outgoing)
+      return false;
+
+    for (const conn of secondGateway.outgoing) {
+      const backwardBranch = conn.target;
+      if (!backwardBranch || !backwardBranch.outgoing || backwardBranch.outgoing.length !== 1)
+        continue;
+  
+      if (backwardBranch.outgoing[0]?.target?.id === gateway.id)
+        return true;
+    }
+  
+    return false;
   }
 
   /**
@@ -659,35 +681,6 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
     this.flagCounts.set(elementId, count + 1);
     return count * 30; // 30px horizontal spacing
   }
-
-  /**
-   * Updates the style of a shape element
-   * @param shape The shape to update
-   * @param styleProperties Object with CSS properties to apply
-   */
-  /*updateShapeStyle(shape: any, styleProperties: Record<string, string>) {
-    if (!shape || !shape.id) return;
-
-    // Get the element from the registry to ensure we're working with the live element
-    const elementRegistry = this.bpmnJS.get('elementRegistry');
-    const canvas = this.bpmnJS.get('canvas');
-
-    const element = elementRegistry.get(shape.id);
-    if (!element) return;
-
-    // Get the graphical element
-    const gfx = canvas.getGraphics(element);
-    if (!gfx) return;
-
-    // Find the path or rect element that represents the shape outline
-    const outline = gfx.querySelector('path') || gfx.querySelector('rect');
-    if (!outline) return;
-
-    // Apply the style properties
-    Object.entries(styleProperties).forEach(([prop, value]) => {
-      outline.style[prop] = value;
-    });
-  }*/
 
   ngOnDestroy(): void {
     this.bpmnJS.destroy();
