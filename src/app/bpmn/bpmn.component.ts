@@ -25,6 +25,7 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
   bpmnJS: BpmnModeler = undefined //The BPMN Modeller instance
   elementNamesMap = new Map<string, string>();
   cumulativeOverlaps = new Map();
+  cumulativeIterations = new Map();
 
   @ViewChild('ref', { static: true }) private el: ElementRef;
 
@@ -227,22 +228,53 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
       this.cumulativeOverlaps = new Map();
     }
 
+    // Track cumulative iterations for each deviation type
+    if (!this.cumulativeIterations) {
+      this.cumulativeIterations = new Map();
+    }
+
+    // Check if this deviation has an iteration index
+    const hasIteration = flag.details.iterationIndex !== undefined && flag.details.iterationIndex !== -1;
+    let iterationText = '';
+    
+    if (hasIteration) {
+      // Create a key for this element + deviation type combination
+      const iterationKey = `${elementId}_${flag.deviation}`;
+      
+      // Get existing iterations for this deviation type on this element
+      const existingIterations = this.cumulativeIterations.get(iterationKey) || [];
+      
+      // Add this iteration if it's not already present
+      if (!existingIterations.includes(flag.details.iterationIndex)) {
+        existingIterations.push(flag.details.iterationIndex);
+        existingIterations.sort((a, b) => a - b); // Keep iterations sorted
+        this.cumulativeIterations.set(iterationKey, existingIterations);
+      }
+      
+      // Build iteration text for tooltip
+      const iterationNumbers = existingIterations.map(iter => `Iteration ${iter + 1}`).join('\n');
+      iterationText = `\n${iterationNumbers}`;
+    }
+
     // Generate the HTML for the icon based on flag type
     let html = '';
+    
     switch (flag.deviation) {
       case 'INCOMPLETE':
-        html = `<img width="25" height="25" src="assets/hazard.png">`;
+        html = `<img width="25" height="25" src="assets/hazard.png" title="Incomplete${iterationText}">`;
         break;
       case 'MULTI_EXECUTION':
         const count = flag.details?.count ?? '?';
-        html = `<img width="20" height="20" src="assets/repeat.png" title="Executions: ${count}">`;
+        html = `<img width="20" height="20" src="assets/repeat.png" title="Executions: ${count}${iterationText}">`;
         break;
       case 'INCORRECT_EXECUTION':
+        html = `<img width="25" height="25" src="assets/cross.png" title="Incorrect Execution${iterationText}">`;
+        break;
       case 'INCORRECT_BRANCH':
-        html = `<img width="25" height="25" src="assets/cross.png">`;
+        html = `<img width="25" height="25" src="assets/cross.png" title="Incorrect Branch${iterationText}">`;
         break;
       case 'SKIPPED':
-        html = `<img width="25" height="25" src="assets/skip.webp">`;
+        html = `<img width="25" height="25" src="assets/skip.webp" title="Skipped${iterationText}">`;
         break;
       case 'OVERLAP':
         // Handle cumulative overlaps
@@ -254,7 +286,7 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
         // Combine existing and new overlaps
         const allOverlaps = [...existingOverlaps];
         if (existingOverlaps.length > 0) {
-          allOverlaps.push('————————');
+          allOverlaps.push('———————————————');
         }
         allOverlaps.push(...newOverlaps);
 
@@ -262,7 +294,7 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
         this.cumulativeOverlaps.set(elementId, [...existingOverlaps, ...newOverlaps]);
 
         const overlapText = allOverlaps.join('\n');
-        html = `<img src="assets/arrows.png" title="Overlaps:\n${overlapText}" style="transform: rotate(90deg); width:25px; height:25px;">`;
+        html = `<img src="assets/arrows.png" title="Overlaps:\n${overlapText}${iterationText}" style="transform: rotate(90deg); width:25px; height:25px;">`;
         break;
     }
 
@@ -271,11 +303,15 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
       const regionElements = this.findGatewayBlock(element);
 
       if (regionElements.length > 0) {
-        // For overlaps, we need special handling to preserve existing overlaps
+        // For overlaps or iterations, we need special handling to preserve existing overlays
         if (flag.deviation === 'OVERLAP') {
           // Remove existing overlap overlays
           this.removeOverlay(`${elementId}_OVERLAP_block`);
           this.removeOverlay(`${elementId}_OVERLAP_icon`);
+        } else if (hasIteration) {
+          // For iterations, remove existing overlay for this deviation type
+          this.removeOverlay(`${elementId}_${flag.deviation}_block`);
+          this.removeOverlay(`${elementId}_${flag.deviation}_icon`);
         } else {
           // Remove any existing overlay for this element and flag type
           this.removeOverlay(`${elementId}_${flag.deviation}_block`);
@@ -338,6 +374,14 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
 
       if (existingOverlapKey) {
         this.removeOverlay(existingOverlapKey);
+      }
+    } else if (hasIteration) {
+      // For iterations, remove existing overlay for this specific deviation type
+      const existingIterationKey = Array.from(this.visibleOverlays.keys())
+        .find(key => key.startsWith(`${elementId}_${flag.deviation}`) && !key.includes('_block') && !key.includes('_icon'));
+
+      if (existingIterationKey) {
+        this.removeOverlay(existingIterationKey);
       }
     }
 
