@@ -24,6 +24,7 @@ import { BpmnBlockOverlayReport, Color, ProcessPerspectiveStatistic } from '../p
 export class BpmnComponent implements AfterContentInit, OnDestroy {
   bpmnJS: BpmnModeler = undefined //The BPMN Modeller instance
   elementNamesMap = new Map<string, string>();
+  cumulativeOverlaps = new Map();
 
   @ViewChild('ref', { static: true }) private el: ElementRef;
 
@@ -209,12 +210,6 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
     return this.elementNamesMap.get(elementId) || 'Element not found';
   }
 
-  /**
- * Adds a flag to an element on the diagram
- * If a certain type of flag is already added to a block, the function will not add it again to avoid duplicating flags
- * @param elementId Id of the block the flag should be added to
- * @param flag Type of the flag
- */
   addFlagToOverlay(elementId: string, flag: { deviation: string, details: any }) {
     const elementRegistry = this.bpmnJS.get('elementRegistry');
     const overlays = this.bpmnJS.get('overlays');
@@ -225,6 +220,11 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
     const element = elementRegistry.get(elementId);
     if (!element) {
       return;
+    }
+
+    // Track cumulative overlaps for this element
+    if (!this.cumulativeOverlaps) {
+      this.cumulativeOverlaps = new Map();
     }
 
     // Generate the HTML for the icon based on flag type
@@ -245,8 +245,24 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
         html = `<img width="25" height="25" src="assets/skip.webp">`;
         break;
       case 'OVERLAP':
-        const over = flag.details?.over?.map(id => this.getElementNameById(id))?.join("\n") ?? '?';
-        html = `<img src="assets/arrows.png" title="Overlaps:\n${over}" style="transform: rotate(90deg); width:25px; height:25px;">`;
+        // Handle cumulative overlaps
+        const newOverlaps = flag.details?.over?.map(id => this.getElementNameById(id)) ?? [];
+
+        // Get existing overlaps for this element
+        const existingOverlaps = this.cumulativeOverlaps.get(elementId) || [];
+
+        // Combine existing and new overlaps
+        const allOverlaps = [...existingOverlaps];
+        if (existingOverlaps.length > 0) {
+          allOverlaps.push('————————');
+        }
+        allOverlaps.push(...newOverlaps);
+
+        // Store the updated cumulative overlaps
+        this.cumulativeOverlaps.set(elementId, [...existingOverlaps, ...newOverlaps]);
+
+        const overlapText = allOverlaps.join('\n');
+        html = `<img src="assets/arrows.png" title="Overlaps:\n${overlapText}" style="transform: rotate(90deg); width:25px; height:25px;">`;
         break;
     }
 
@@ -255,8 +271,15 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
       const regionElements = this.findGatewayBlock(element);
 
       if (regionElements.length > 0) {
-        // Remove any existing overlay for this element and flag type
-        this.removeOverlay(`${elementId}_${flag.deviation}_block`);
+        // For overlaps, we need special handling to preserve existing overlaps
+        if (flag.deviation === 'OVERLAP') {
+          // Remove existing overlap overlays
+          this.removeOverlay(`${elementId}_OVERLAP_block`);
+          this.removeOverlay(`${elementId}_OVERLAP_icon`);
+        } else {
+          // Remove any existing overlay for this element and flag type
+          this.removeOverlay(`${elementId}_${flag.deviation}_block`);
+        }
 
         // Calculate the bounding box of the gateway region
         const bbox = this.calculateBoundingBoxDirect(regionElements);
@@ -273,31 +296,24 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
         shape.width = bbox.width;
         shape.height = bbox.height;
 
-        // Create a class to identify this element for potential removal later
-        const rectId = `gateway-block-${elementId}`;
-
         // Add the rectangle to the root of the diagram
         const rootElement = canvas.getRootElement();
         const addedShape = modeling.createShape(shape, { x: bbox.x + bbox.width / 2, y: bbox.y + bbox.height / 2 }, rootElement);
 
-        /*modeling.setColor(addedShape, {
-          stroke: 'red',
-          fill: null
-        });*/
-
         const gfx = elementRegistry.getGraphics(addedShape);
-        const rect = gfx.querySelector('rect'); // or 'path' depending on element
+        const rect = gfx.querySelector('rect');
 
         if (rect) {
           rect.removeAttribute('style');
           rect.setAttribute('stroke', 'red');
           rect.setAttribute('stroke-width', '2');
-          rect.setAttribute('stroke-dasharray', '4,2'); // dashed line: 4px dash, 2px gap
+          rect.setAttribute('stroke-dasharray', '4,2');
           rect.setAttribute('fill', 'none');
         }
 
         // Store a reference to this shape for later removal
-        this.visibleOverlays.set(`${elementId}_${flag.deviation}_block`, addedShape);
+        const blockKey = flag.deviation === 'OVERLAP' ? `${elementId}_OVERLAP_block` : `${elementId}_${flag.deviation}_block`;
+        this.visibleOverlays.set(blockKey, addedShape);
 
         // Also add the icon overlay to the gateway
         const iconOverlay = overlays.add(isGateway ? addedShape : elementId, {
@@ -308,19 +324,33 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
           html: `<div>${html}</div>`
         });
 
-        this.visibleOverlays.set(`${elementId}_${flag.deviation}_icon`, iconOverlay);
+        const iconKey = flag.deviation === 'OVERLAP' ? `${elementId}_OVERLAP_icon` : `${elementId}_${flag.deviation}_icon`;
+        this.visibleOverlays.set(iconKey, iconOverlay);
         return;
       }
     }
 
     // Fallback: normal flag added to the element
+    if (flag.deviation === 'OVERLAP') {
+      // For normal elements with overlap, remove existing overlap overlay
+      const existingOverlapKey = Array.from(this.visibleOverlays.keys())
+        .find(key => key.startsWith(`${elementId}_OVERLAP`) && !key.includes('_block') && !key.includes('_icon'));
+
+      if (existingOverlapKey) {
+        this.removeOverlay(existingOverlapKey);
+      }
+    }
+
     let flagNumber = 0;
     for (const [key] of this.visibleOverlays.entries()) {
-      if (key.includes(elementId)) flagNumber++;
+      if (key.includes(elementId) && !key.includes('_block') && !key.includes('_icon')) {
+        flagNumber++;
+      }
     }
 
     // Add the overlay
-    this.visibleOverlays.set(`${elementId}_${flag.deviation}`, overlays.add(elementId, {
+    const overlayKey = flag.deviation === 'OVERLAP' ? `${elementId}_OVERLAP` : `${elementId}_${flag.deviation}`;
+    this.visibleOverlays.set(overlayKey, overlays.add(elementId, {
       position: {
         top: -28,
         right: 30 * flagNumber
@@ -555,13 +585,13 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
    * @returns Boolean indicating if this is a loop gateway
    */
   isLoopGateway(gateway: any): boolean {
-    if (!gateway || gateway.type !== 'bpmn:ExclusiveGateway') 
+    if (!gateway || gateway.type !== 'bpmn:ExclusiveGateway')
       return false
-    if (!gateway.outgoing || gateway.outgoing.length !== 1) 
+    if (!gateway.outgoing || gateway.outgoing.length !== 1)
       return false
 
     const forwardBranch = gateway.outgoing[0]?.target;
-    if (!forwardBranch || !forwardBranch.outgoing || forwardBranch.outgoing.length !== 1) 
+    if (!forwardBranch || !forwardBranch.outgoing || forwardBranch.outgoing.length !== 1)
       return false
 
     const secondGateway = forwardBranch.outgoing[0]?.target;
@@ -572,11 +602,11 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
       const backwardBranch = conn.target;
       if (!backwardBranch || !backwardBranch.outgoing || backwardBranch.outgoing.length !== 1)
         continue;
-  
+
       if (backwardBranch.outgoing[0]?.target?.id === gateway.id)
         return true;
     }
-  
+
     return false;
   }
 
