@@ -41,7 +41,7 @@ export class StakeholdersComponent implements OnInit {
         this.isResult = true
       }
       else {
-        this.snackBar.open(`The requested Stakeholder does not found!`, "Hide", { duration: 2000 });
+        this.snackBar.open(`The requested Stakeholder not found!`, "Hide", { duration: 2000 });
         this.isResult = false
       }
     }

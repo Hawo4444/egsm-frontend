@@ -69,7 +69,7 @@ export class LibraryComponent implements AfterViewInit {
       }
       else if (update['result'] == 'not_found') {
         this.isProcessGroupDetailsFound = false
-        this.snackBar.open(`Process group does not found`, "Hide", { duration: 2000 });
+        this.snackBar.open(`Process group not found`, "Hide", { duration: 2000 });
       }
     }
   }

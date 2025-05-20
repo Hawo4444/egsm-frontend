@@ -378,15 +378,14 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
         maxY = Math.max(maxY, element.y + element.height);
       }
     }
-
-    // Add padding around the bounding box
     const padding = 10;
+    const extraTop = 25;
 
     return {
       x: minX - padding,
-      y: minY - padding,
+      y: minY - padding - extraTop,
       width: maxX - minX + (2 * padding),
-      height: maxY - minY + (2 * padding)
+      height: maxY - minY + (2 * padding) + extraTop
     };
   }
 
@@ -411,27 +410,27 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
       });
     });
 
-    // Map to track where paths intersect
+    //Map to track where paths intersect
     const intersections = new Map<string, number>();
 
-    // Process each path
+    //Process each path
     while (paths.some(p => p.element !== null)) {
-      // For each active path
+      //For each active path
       for (let i = 0; i < paths.length; i++) {
         const path = paths[i];
         if (!path.element) continue;
 
-        // Check if this element appears in other paths
+        //Check if this element appears in other paths
         if (path.element.type.includes('Gateway') && path.element.incoming.length > 1) {
           intersections.set(path.element.id, (intersections.get(path.element.id) || 0) + 1);
 
-          // If we've found this element in all paths, it's our joining gateway
+          //If we've found this element in all paths, it's our joining gateway
           if (intersections.get(path.element.id) === paths.length) {
             return path.element;
           }
         }
 
-        // Move to next element in this path
+        //Move to next element in this path
         if (path.element.outgoing && path.element.outgoing.length > 0) {
           let nextFound = false;
 
@@ -445,10 +444,10 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
           }
 
           if (!nextFound) {
-            path.element = null; // End of this path
+            path.element = null; //End of this path
           }
         } else {
-          path.element = null; // End of this path
+          path.element = null; //End of this path
         }
       }
     }

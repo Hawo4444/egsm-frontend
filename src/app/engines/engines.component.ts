@@ -87,7 +87,7 @@ export class EnginesComponent {
       }
     }
     else if (engines != undefined) {
-      this.snackBar.open(`The requested Process Instance does not found!`, "Hide", { duration: 2000 });
+      this.snackBar.open(`The requested Process Instance not found!`, "Hide", { duration: 2000 });
       this.isResult = false
     }
 
