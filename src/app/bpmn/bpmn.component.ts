@@ -25,7 +25,8 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
   bpmnJS: BpmnModeler = undefined //The BPMN Modeller instance
   elementNamesMap = new Map<string, string>();
   cumulativeOverlaps = new Map();
-  cumulativeIterations = new Map();
+  cumulativeIterations = new Map();// Map to store fixed positions for each deviation type on each element
+  iconPositions: Map<string, { [deviationType: string]: number }> = new Map();
 
   @ViewChild('ref', { static: true }) private el: ElementRef;
 
@@ -134,11 +135,11 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
   }
 
   /**
-   * Apply a list of BpmnBlockOverlayReport-s on the diagram
-   * The function iterates through all reports in the 'overlayreport' attribute and applies its content on the diagram
-   * BpmnBlockOverlayReport-s can change block color or add icon(s) to blocks
-   * @param overlayreport List of BpmnBlockOverlayReport-s
-   */
+ * Apply a list of BpmnBlockOverlayReport-s on the diagram
+ * The function iterates through all reports in the 'overlayreport' attribute and applies its content on the diagram
+ * BpmnBlockOverlayReport-s can change block color or add icon(s) to blocks
+ * @param overlayreport List of BpmnBlockOverlayReport-s
+ */
   applyOverlayReport(overlayreport: BpmnBlockOverlayReport[]) {
     var overlay = this.bpmnJS.get('overlays');
     overlayreport.forEach(element => {
@@ -149,21 +150,42 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
           this.setBlockColor(element.block_id, element.color)
           this.blockProperties.get(element.block_id).color = element.color
         }
-        this.blockProperties.get(element.block_id).flags.forEach(flag => {
+
+        // Create a Set from the current flags for easier comparison
+        const currentFlags = new Set(Array.from(this.blockProperties.get(element.block_id).flags));
+
+        // Find flags to remove (in current but not in new)
+        currentFlags.forEach(flag => {
           if (!element.flags.some(f => f.deviation === flag)) {
             // Remove flag since it's no longer part of the report
-            overlay.remove(this.visibleOverlays.get(element.block_id + flag));
-            this.visibleOverlays.delete(element.block_id + flag);
+            this.removeOverlay(element.block_id + "_" + flag);
             this.blockProperties.get(element.block_id).flags.delete(flag);
+
+            // Also remove position entry if it exists
+            if (this.iconPositions.has(element.block_id)) {
+              const positions = this.iconPositions.get(element.block_id)!;
+              if (positions[flag as string]) {
+                delete positions[flag as string];
+              }
+            }
           }
-        })
+        });
+
+        // Process all flags - both new and those with updated info
         element.flags.forEach(flag => {
-          if (!this.visibleOverlays.has(element.block_id + "_" + flag.deviation)) {
-            this.addFlagToOverlay(element.block_id, flag);
+          // Always update the flag to ensure latest info is shown
+          this.addFlagToOverlay(element.block_id, flag);
+
+          // Mark as existing in current properties if it's new
+          if (!this.blockProperties.get(element.block_id).flags.has(flag.deviation)) {
+            this.blockProperties.get(element.block_id).flags.add(flag.deviation);
           }
         });
       } else {
-        this.blockProperties.set(element.block_id, { color: element.color, flags: new Set(element.flags.map(f => f.deviation)) });
+        this.blockProperties.set(element.block_id, {
+          color: element.color,
+          flags: new Set(element.flags.map(f => f.deviation))
+        });
         this.setBlockColor(element.block_id, element.color);
         element.flags.forEach(flag => {
           this.addFlagToOverlay(element.block_id, flag);
@@ -211,6 +233,9 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
     return this.elementNamesMap.get(elementId) || 'Element not found';
   }
 
+  // Track gateway blocks to ensure only one border per gateway
+  private gatewayBlocks: Map<string, any> = new Map();
+
   addFlagToOverlay(elementId: string, flag: { deviation: string, details: any }) {
     const elementRegistry = this.bpmnJS.get('elementRegistry');
     const overlays = this.bpmnJS.get('overlays');
@@ -223,34 +248,20 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
       return;
     }
 
-    // Track cumulative overlaps for this element
-    if (!this.cumulativeOverlaps) {
-      this.cumulativeOverlaps = new Map();
-    }
-
-    // Track cumulative iterations for each deviation type
-    if (!this.cumulativeIterations) {
-      this.cumulativeIterations = new Map();
-    }
-
-    // Check if this deviation has an iteration index
     const hasIteration = flag.details.iterationIndex !== undefined && flag.details.iterationIndex !== -1;
     let iterationText = '';
-    
+
     if (hasIteration) {
-      // Create a key for this element + deviation type combination
       const iterationKey = `${elementId}_${flag.deviation}`;
-      
-      // Get existing iterations for this deviation type on this element
       const existingIterations = this.cumulativeIterations.get(iterationKey) || [];
-      
+
       // Add this iteration if it's not already present
       if (!existingIterations.includes(flag.details.iterationIndex)) {
         existingIterations.push(flag.details.iterationIndex);
         existingIterations.sort((a, b) => a - b); // Keep iterations sorted
         this.cumulativeIterations.set(iterationKey, existingIterations);
       }
-      
+
       // Build iteration text for tooltip
       const iterationNumbers = existingIterations.map(iter => `Iteration ${iter + 1}`).join('\n');
       iterationText = `\n${iterationNumbers}`;
@@ -258,7 +269,7 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
 
     // Generate the HTML for the icon based on flag type
     let html = '';
-    
+
     switch (flag.deviation) {
       case 'INCOMPLETE':
         html = `<img width="25" height="25" src="assets/hazard.png" title="Incomplete${iterationText}">`;
@@ -285,7 +296,7 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
 
         // Combine existing and new overlaps
         const allOverlaps = [...existingOverlaps];
-        if (existingOverlaps.length > 0) {
+        if (existingOverlaps.length > 0 && newOverlaps.length > 0) {
           allOverlaps.push('———————————————');
         }
         allOverlaps.push(...newOverlaps);
@@ -303,101 +314,130 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
       const regionElements = this.findGatewayBlock(element);
 
       if (regionElements.length > 0) {
-        // For overlaps or iterations, we need special handling to preserve existing overlays
-        if (flag.deviation === 'OVERLAP') {
-          // Remove existing overlap overlays
-          this.removeOverlay(`${elementId}_OVERLAP_block`);
-          this.removeOverlay(`${elementId}_OVERLAP_icon`);
-        } else if (hasIteration) {
-          // For iterations, remove existing overlay for this deviation type
-          this.removeOverlay(`${elementId}_${flag.deviation}_block`);
-          this.removeOverlay(`${elementId}_${flag.deviation}_icon`);
-        } else {
-          // Remove any existing overlay for this element and flag type
-          this.removeOverlay(`${elementId}_${flag.deviation}_block`);
+        // Check if we already have a gateway block for this gateway
+        const gatewayBlockKey = `${elementId}_gateway_block`;
+        let addedShape = this.gatewayBlocks.get(elementId);
+
+        // If no gateway block exists for this gateway, create one
+        if (!addedShape) {
+          // Calculate the bounding box of the gateway region
+          const bbox = this.calculateBoundingBoxDirect(regionElements);
+
+          // Create a shape for the rectangle
+          const shape = elementFactory.createShape({
+            type: 'bpmn:Group',
+            businessObject: {}
+          });
+
+          // Set the shape's position and dimensions
+          shape.x = bbox.x;
+          shape.y = bbox.y;
+          shape.width = bbox.width;
+          shape.height = bbox.height;
+
+          // Add the rectangle to the root of the diagram
+          const rootElement = canvas.getRootElement();
+          addedShape = modeling.createShape(shape, { x: bbox.x + bbox.width / 2, y: bbox.y + bbox.height / 2 }, rootElement);
+
+          const gfx = elementRegistry.getGraphics(addedShape);
+          const rect = gfx.querySelector('rect');
+
+          if (rect) {
+            rect.removeAttribute('style');
+            rect.setAttribute('stroke', 'red');
+            rect.setAttribute('stroke-width', '2');
+            rect.setAttribute('stroke-dasharray', '4,2');
+            rect.setAttribute('fill', 'none');
+          }
+
+          // Store a reference to this shape for later removal
+          this.visibleOverlays.set(gatewayBlockKey, addedShape);
+          this.gatewayBlocks.set(elementId, addedShape);
         }
 
-        // Calculate the bounding box of the gateway region
-        const bbox = this.calculateBoundingBoxDirect(regionElements);
-
-        // Create a shape for the rectangle
-        const shape = elementFactory.createShape({
-          type: 'bpmn:Group',
-          businessObject: {}
-        });
-
-        // Set the shape's position and dimensions
-        shape.x = bbox.x;
-        shape.y = bbox.y;
-        shape.width = bbox.width;
-        shape.height = bbox.height;
-
-        // Add the rectangle to the root of the diagram
-        const rootElement = canvas.getRootElement();
-        const addedShape = modeling.createShape(shape, { x: bbox.x + bbox.width / 2, y: bbox.y + bbox.height / 2 }, rootElement);
-
-        const gfx = elementRegistry.getGraphics(addedShape);
-        const rect = gfx.querySelector('rect');
-
-        if (rect) {
-          rect.removeAttribute('style');
-          rect.setAttribute('stroke', 'red');
-          rect.setAttribute('stroke-width', '2');
-          rect.setAttribute('stroke-dasharray', '4,2');
-          rect.setAttribute('fill', 'none');
-        }
-
-        // Store a reference to this shape for later removal
-        const blockKey = flag.deviation === 'OVERLAP' ? `${elementId}_OVERLAP_block` : `${elementId}_${flag.deviation}_block`;
-        this.visibleOverlays.set(blockKey, addedShape);
-
-        // Also add the icon overlay to the gateway
-        const iconOverlay = overlays.add(isGateway ? addedShape : elementId, {
-          position: {
-            top: -30,
-            left: this.getNextFlagOffset(elementId)
-          },
-          html: `<div>${html}</div>`
-        });
-
-        const iconKey = flag.deviation === 'OVERLAP' ? `${elementId}_OVERLAP_icon` : `${elementId}_${flag.deviation}_icon`;
-        this.visibleOverlays.set(iconKey, iconOverlay);
+        // For gateway icons, we need a different approach to maintain positions
+        this.updateGatewayIcon(elementId, flag, html, addedShape);
         return;
       }
     }
 
-    // Fallback: normal flag added to the element
-    if (flag.deviation === 'OVERLAP') {
-      // For normal elements with overlap, remove existing overlap overlay
-      const existingOverlapKey = Array.from(this.visibleOverlays.keys())
-        .find(key => key.startsWith(`${elementId}_OVERLAP`) && !key.includes('_block') && !key.includes('_icon'));
+    // For regular elements (non-gateways), use a similar approach to maintain positions
+    this.updateRegularElementIcon(elementId, flag, html);
+  }
 
-      if (existingOverlapKey) {
-        this.removeOverlay(existingOverlapKey);
-      }
-    } else if (hasIteration) {
-      // For iterations, remove existing overlay for this specific deviation type
-      const existingIterationKey = Array.from(this.visibleOverlays.keys())
-        .find(key => key.startsWith(`${elementId}_${flag.deviation}`) && !key.includes('_block') && !key.includes('_icon'));
+  // Updates gateway icon without disrupting other icons' positions
+  private updateGatewayIcon(elementId: string, flag: { deviation: string, details: any }, html: string, addedShape: any) {
+    const overlays = this.bpmnJS.get('overlays');
+    const overlayKey = `${elementId}_${flag.deviation}_icon`;
 
-      if (existingIterationKey) {
-        this.removeOverlay(existingIterationKey);
-      }
+    // Keep track of positions for each element and flag type
+    if (!this.iconPositions.has(elementId)) {
+      this.iconPositions.set(elementId, {});
     }
 
-    let flagNumber = 0;
-    for (const [key] of this.visibleOverlays.entries()) {
-      if (key.includes(elementId) && !key.includes('_block') && !key.includes('_icon')) {
-        flagNumber++;
-      }
+    const elementPositions = this.iconPositions.get(elementId);
+
+    // If this is the first time we're seeing this flag type, assign it a position
+    if (elementPositions[flag.deviation] === undefined) {
+      // Count existing positions to assign a new one
+      const existingPositionCount = Object.keys(elementPositions).length;
+      elementPositions[flag.deviation] = existingPositionCount * 30; // 30px spacing
     }
 
-    // Add the overlay
-    const overlayKey = flag.deviation === 'OVERLAP' ? `${elementId}_OVERLAP` : `${elementId}_${flag.deviation}`;
+    // Use the stored position for this flag type
+    const position = elementPositions[flag.deviation];
+
+    // Remove existing icon overlay for this deviation if it exists
+    if (this.visibleOverlays.has(overlayKey)) {
+      overlays.remove(this.visibleOverlays.get(overlayKey));
+      this.visibleOverlays.delete(overlayKey);
+    }
+
+    // Add the icon at its assigned position
+    const iconOverlay = overlays.add(addedShape, {
+      position: {
+        top: -30,
+        left: position
+      },
+      html: `<div>${html}</div>`
+    });
+
+    this.visibleOverlays.set(overlayKey, iconOverlay);
+  }
+
+  // Updates regular element icon without disrupting other icons' positions
+  private updateRegularElementIcon(elementId: string, flag: { deviation: string, details: any }, html: string) {
+    const overlays = this.bpmnJS.get('overlays');
+    const overlayKey = `${elementId}_${flag.deviation}`;
+
+    // Keep track of positions for each element and flag type
+    if (!this.iconPositions.has(elementId)) {
+      this.iconPositions.set(elementId, {});
+    }
+
+    const elementPositions = this.iconPositions.get(elementId);
+
+    // If this is the first time we're seeing this flag type, assign it a position
+    if (elementPositions[flag.deviation] === undefined) {
+      // Count existing positions to assign a new one
+      const existingPositionCount = Object.keys(elementPositions).length;
+      elementPositions[flag.deviation] = existingPositionCount * 30; // 30px spacing
+    }
+
+    // Use the stored position for this flag type
+    const position = elementPositions[flag.deviation];
+
+    // Remove existing overlay for this deviation if it exists
+    if (this.visibleOverlays.has(overlayKey)) {
+      overlays.remove(this.visibleOverlays.get(overlayKey));
+      this.visibleOverlays.delete(overlayKey);
+    }
+
+    // Add the overlay at its assigned position
     this.visibleOverlays.set(overlayKey, overlays.add(elementId, {
       position: {
         top: -28,
-        right: 30 * flagNumber
+        right: position
       },
       html: html
     }));
@@ -417,6 +457,30 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
       // Check if this is a shape that needs to be removed
       if (overlay && overlay.type) {
         modeling.removeShape(overlay);
+
+        // If it's a gateway block, also remove it from the gatewayBlocks map
+        const gatewayId = id.split('_')[0];
+        if (id.includes('_gateway_block')) {
+          this.gatewayBlocks.delete(gatewayId);
+
+          // Also need to remove all icons attached to this gateway block
+          const iconsToRemove = [];
+          for (const [key, _] of this.visibleOverlays.entries()) {
+            if (key.startsWith(`${gatewayId}_`) && key.endsWith('_icon')) {
+              iconsToRemove.push(key);
+            }
+          }
+
+          iconsToRemove.forEach(iconKey => {
+            overlays.remove(this.visibleOverlays.get(iconKey));
+            this.visibleOverlays.delete(iconKey);
+          });
+
+          // Also clean up the positions for this gateway
+          if (this.iconPositions.has(gatewayId)) {
+            this.iconPositions.delete(gatewayId);
+          }
+        }
       }
       // Otherwise it's a regular overlay
       else if (overlay) {
@@ -747,12 +811,6 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
     }
 
     return resultPaths;
-  }
-
-  private getNextFlagOffset(elementId: string): number {
-    const count = this.flagCounts.get(elementId) || 0;
-    this.flagCounts.set(elementId, count + 1);
-    return count * 30; // 30px horizontal spacing
   }
 
   ngOnDestroy(): void {
