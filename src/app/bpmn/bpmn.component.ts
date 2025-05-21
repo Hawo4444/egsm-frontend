@@ -297,7 +297,7 @@ export class BpmnComponent implements AfterContentInit, OnDestroy {
         // Combine existing and new overlaps
         const allOverlaps = [...existingOverlaps];
         if (existingOverlaps.length > 0 && newOverlaps.length > 0) {
-          allOverlaps.push('———————————————');
+          allOverlaps.push('————————');
         }
         allOverlaps.push(...newOverlaps);
 
