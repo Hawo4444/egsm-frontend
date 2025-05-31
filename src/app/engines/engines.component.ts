@@ -16,7 +16,6 @@ interface AggregationJob {
   job_type: string;
   process_type: string;
   perspectives: string[];
-  status: string;
   host: string;
   port: number;
 }
@@ -30,19 +29,19 @@ export class EnginesComponent {
   eventSubscription: any
   aggregatorEventSubscription: any
   aggregationEventSubscription: any // New: for aggregation HTTP responses
-  aggregationModeSubscription: any   // New: for aggregation WebSocket updates
-  
+  aggregationModeSubscription: any // New: for aggregation WebSocket updates
+
   currentProcessType: string
   currentProcessId: string
   currentBpmnJob: any = undefined
   currentAggregationJob: any = undefined // New: track current aggregation job
-  
+
   diagramPerspectives: ProcessPerspective[] = []
   diagramOverlays: BpmnBlockOverlayReport[] = []
-  
+
   aggregator: AggregatorConnector = new AggregatorConnector()
   aggregationAggregator: AggregatorConnector = new AggregatorConnector() // New: separate aggregator for aggregation mode
-  
+
   isResult: boolean = false
   viewMode: 'instance' | 'aggregation' = 'instance'
   availableAggregations: AggregationJob[] = []
@@ -57,7 +56,7 @@ export class EnginesComponent {
     this.eventSubscription = this.supervisorService.ProcessSearchEventEmitter.subscribe((update: any) => {
       this.applyUpdate(update)
     })
-    
+
     this.aggregationEventSubscription = this.supervisorService.AggregatorEventEmitter.subscribe((update: any) => {
       this.applyAggregatorUpdate(update)
     })
@@ -84,7 +83,7 @@ export class EnginesComponent {
     this.loadingService.setLoadningState(false)
     var engines = update['engines'] || undefined
     var deleteResult = update['delete_result'] || undefined
-    
+
     if (engines != undefined && engines.length > 0) {
       if (this.engineList) {
         this.engineList.update(update['engines'])
@@ -96,10 +95,10 @@ export class EnginesComponent {
           }
         }, 100);
       }
-      
+
       this.isResult = true
       this.currentProcessType = update['engines'][0].type
-      
+
       if (update['bpmn_job'] != 'not_found') {
         this.currentBpmnJob = update['bpmn_job']
         this.aggregator.connect(this.currentBpmnJob.host, this.currentBpmnJob.port)
@@ -149,9 +148,16 @@ export class EnginesComponent {
   // New: Handle aggregation HTTP responses (equivalent to applyUpdate for aggregation)
   applyAggregatorUpdate(update: any) {
     this.loadingService.setLoadningState(false)
-    
-    if (update['payload']?.['available_aggregations']) {
-      this.availableAggregations = update['payload']['available_aggregations']
+
+    if (update['type'] == 'available_aggregations') {
+      this.availableAggregations = update['available_aggregations'].map((agg: any) => ({
+        job_id: agg.id,
+        job_type: agg.job_type,
+        process_type: agg.processType,
+        perspectives: agg.perspectives,
+        host: agg.brokers[0]?.host || '',
+        port: agg.brokers[0]?.port || 0
+      }));
       this.isResult = true // Show the aggregation list
     }
 
@@ -185,7 +191,7 @@ export class EnginesComponent {
   switchToInstanceView() {
     this.viewMode = 'instance'
     this.isResult = false
-    
+
     // Clean up aggregation mode
     if (this.aggregationEventSubscription) {
       this.aggregationEventSubscription.unsubscribe()
@@ -237,7 +243,7 @@ export class EnginesComponent {
     this.currentProcessId = instance_id
     this.viewMode = 'instance' // Ensure we're in instance mode
     this.requestProcessData()
-    
+
     if (this.currentBpmnJob) {
       this.aggregatorEventSubscription.unsubscribe()
       this.aggregator.disconnect()

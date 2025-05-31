@@ -26,7 +26,7 @@
         <div *ngIf="viewMode === 'aggregation'" class="engine-id-container">
             <mat-form-field appearance="fill">
                 <mat-label>Select Process Type</mat-label>
-                <mat-select (selectionChange)="onAggregationSelected($event.value)">
+                <mat-select (selectionChange)="onAggregationSelected($event.value)" disableOptionCentering="true">
                     <mat-option *ngFor="let agg of availableAggregations" [value]="agg.process_type">
                         {{agg.process_type}}
                     </mat-option>
