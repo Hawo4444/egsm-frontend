@@ -26,15 +26,15 @@ interface AggregationJob {
   styleUrls: ['./engines.component.scss']
 })
 export class EnginesComponent {
-  eventSubscription: any
-  aggregatorEventSubscription: any
-  aggregationEventSubscription: any // New: for aggregation HTTP responses
-  aggregationModeSubscription: any // New: for aggregation WebSocket updates
+  instanceEventSubscription: any
+  instanceAggregatorEventSubscription: any
+  typeAggregationEventSubscription: any // New: for aggregation HTTP responses
+  typeAggregationModeSubscription: any // New: for aggregation WebSocket updates
 
   currentProcessType: string
   currentProcessId: string
   currentBpmnJob: any = undefined
-  currentAggregationJob: any = undefined // New: track current aggregation job
+  currentAggregationJob: any = undefined
 
   diagramPerspectives: ProcessPerspective[] = []
   diagramOverlays: BpmnBlockOverlayReport[] = []
@@ -53,27 +53,27 @@ export class EnginesComponent {
   @ViewChildren('bpmn_diagrams') bpmnDiagrams: BpmnComponent[]
 
   constructor(private supervisorService: SupervisorService, private snackBar: MatSnackBar, private loadingService: LoadingService, public deleteProcessDialog: MatDialog) {
-    this.eventSubscription = this.supervisorService.ProcessSearchEventEmitter.subscribe((update: any) => {
+    this.instanceEventSubscription = this.supervisorService.ProcessSearchEventEmitter.subscribe((update: any) => {
       this.applyUpdate(update)
     })
 
-    this.aggregationEventSubscription = this.supervisorService.AggregatorEventEmitter.subscribe((update: any) => {
+    this.typeAggregationEventSubscription = this.supervisorService.AggregatorEventEmitter.subscribe((update: any) => {
       this.applyAggregatorUpdate(update)
     })
   }
 
   ngOnDestroy() {
-    this.eventSubscription.unsubscribe()
+    this.instanceEventSubscription.unsubscribe()
     if (this.currentBpmnJob) {
-      this.aggregatorEventSubscription.unsubscribe()
+      this.instanceAggregatorEventSubscription.unsubscribe()
       this.aggregator.disconnect()
     }
-    if (this.aggregationEventSubscription) {
-      this.aggregationEventSubscription.unsubscribe()
+    if (this.typeAggregationEventSubscription) {
+      this.typeAggregationEventSubscription.unsubscribe()
     }
     if (this.currentAggregationJob) {
-      if (this.aggregationModeSubscription) {
-        this.aggregationModeSubscription.unsubscribe()
+      if (this.typeAggregationModeSubscription) {
+        this.typeAggregationModeSubscription.unsubscribe()
       }
       this.aggregationAggregator.disconnect()
     }
@@ -103,7 +103,7 @@ export class EnginesComponent {
         this.currentBpmnJob = update['bpmn_job']
         this.aggregator.connect(this.currentBpmnJob.host, this.currentBpmnJob.port)
         var timeout = undefined
-        this.aggregatorEventSubscription = this.aggregator.getEventEmitter().subscribe((data) => {
+        this.instanceAggregatorEventSubscription = this.aggregator.getEventEmitter().subscribe((data) => {
           if (data['update']?.['perspectives'] != undefined) {
             if (this.diagramPerspectives.length != 0) {
               if (timeout != undefined) {
@@ -145,7 +145,7 @@ export class EnginesComponent {
     }
   }
 
-  // New: Handle aggregation HTTP responses (equivalent to applyUpdate for aggregation)
+  // Handle aggregation HTTP responses (equivalent to applyUpdate for aggregation)
   applyAggregatorUpdate(update: any) {
     this.loadingService.setLoadningState(false)
 
@@ -174,13 +174,13 @@ export class EnginesComponent {
     }
   }
 
-  // New: User action to switch to aggregation view (equivalent to onSearch)
+  // User action to switch to aggregation view (equivalent to onSearch)
   switchToAggregationView() {
     this.viewMode = 'aggregation'
 
     // Clean up instance view data
     if (this.currentBpmnJob) {
-      this.aggregatorEventSubscription.unsubscribe()
+      this.instanceAggregatorEventSubscription.unsubscribe()
       this.aggregator.disconnect()
       this.currentBpmnJob = undefined
     }
@@ -192,11 +192,17 @@ export class EnginesComponent {
     this.currentProcessType = ''
     this.isResult = false
 
+    if (!this.typeAggregationEventSubscription) {
+      this.typeAggregationEventSubscription = this.supervisorService.AggregatorEventEmitter.subscribe((update: any) => {
+        this.applyAggregatorUpdate(update)
+      })
+    }
+
     // Request aggregation data
     this.requestAvailableAggregations()
   }
 
-  // New: User selects an aggregation job (equivalent to process instance selection)
+  // User selects an aggregation job
   onAggregationSelected(processType: string) {
     // Just request data - WebSocket connection will happen in applyAggregatorUpdate()
     this.currentProcessType = processType
@@ -209,13 +215,13 @@ export class EnginesComponent {
     this.isResult = false
 
     // Clean up aggregation mode
-    if (this.aggregationEventSubscription) {
-      this.aggregationEventSubscription.unsubscribe()
-      this.aggregationEventSubscription = undefined
+    if (this.typeAggregationEventSubscription) {
+      this.typeAggregationEventSubscription.unsubscribe()
+      this.typeAggregationEventSubscription = undefined
     }
     if (this.currentAggregationJob) {
-      if (this.aggregationModeSubscription) {
-        this.aggregationModeSubscription.unsubscribe()
+      if (this.typeAggregationModeSubscription) {
+        this.typeAggregationModeSubscription.unsubscribe()
       }
       this.aggregationAggregator.disconnect()
       this.currentAggregationJob = undefined
@@ -258,15 +264,14 @@ export class EnginesComponent {
     });
   }
 
-  // Original methods - unchanged
   onSearch(instance_id: any) {
     this.snackBar.dismiss()
     this.currentProcessId = instance_id
-    this.viewMode = 'instance' // Ensure we're in instance mode
+    this.viewMode = 'instance' // Ensure instance mode
     this.requestProcessData()
 
     if (this.currentBpmnJob) {
-      this.aggregatorEventSubscription.unsubscribe()
+      this.instanceAggregatorEventSubscription.unsubscribe()
       this.aggregator.disconnect()
       this.currentBpmnJob = undefined
       this.diagramPerspectives = []
