@@ -3,6 +3,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AggregatorConnector } from '../AggregatorConnector';
 import { BpmnComponent } from '../bpmn/bpmn.component';
+import { AggregatedBpmnComponent } from '../bpmn/aggregated-bpmn.component';
 import { DeleteProcessDialogComponent } from '../delete-process-dialog/delete-process-dialog.component';
 import { EngineListComponent } from '../engine-list/engine-list.component';
 import { LoadingService } from '../loading.service';
@@ -51,6 +52,7 @@ export class EnginesComponent {
 
   @ViewChild('engines') engineList: EngineListComponent
   @ViewChildren('bpmn_diagrams') bpmnDiagrams: BpmnComponent[]
+  @ViewChildren('aggregated_bpmn_diagrams') aggregatedBpmnDiagrams: AggregatedBpmnComponent[]
 
   constructor(private supervisorService: SupervisorService, private snackBar: MatSnackBar, private loadingService: LoadingService, public deleteProcessDialog: MatDialog) {
     this.instanceEventSubscription = this.supervisorService.ProcessSearchEventEmitter.subscribe((update: any) => {

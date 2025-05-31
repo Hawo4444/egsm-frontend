@@ -32,6 +32,14 @@
                     </mat-option>
                 </mat-select>
             </mat-form-field>
+
+            <div *ngIf="availableAggregations.length === 0 && isResult" class="no-aggregators-message">
+                <mat-card>
+                    <mat-card-content>
+                        <p>There are currently no process aggregations available to display.</p>
+                    </mat-card-content>
+                </mat-card>
+            </div>
         </div>
     </mat-card>
 </div>
