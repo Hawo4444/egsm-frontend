@@ -181,17 +181,9 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
         var element = elementRegistry.get(taskId)
         
         if (color == undefined) {
-            modeling.setColor([element], { stroke: '#000000', fill: '#ffffff' });
+            modeling.setColor([element], { fill: '#ffffff' });
         } else {
-            const colorConfig: any = { 
-                fill: color.fill 
-            };
-            
-            if (color.stroke !== null && color.stroke !== undefined) {
-                colorConfig.stroke = color.stroke;
-            }
-            
-            modeling.setColor([element], colorConfig);
+            modeling.setColor([element], { fill: color.fill });
         }
     }
 
