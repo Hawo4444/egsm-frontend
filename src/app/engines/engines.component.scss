@@ -1,7 +1,7 @@
 .bpmn-container {
     margin-left: auto;
     margin-right: auto;
-    width: 95%;
+    width: 98%;
     height: 650px;
 }
 
@@ -31,39 +31,37 @@
     }
 }
 
-.stat-chips {
+.summary-cards {
     display: flex;
     gap: 10px;
+    margin: 5px 0;
     flex-wrap: wrap;
 }
 
-.stat-chip {
-    padding: 6px 12px;
-    border-radius: 16px;
-    font-size: 12px;
-    font-weight: 500;
+.summary-card {
+    flex: 1;
+    min-width: 120px;
+    text-align: center;
 
-    &.severity-critical {
-        background-color: #ffebee;
-        color: #c62828;
-        border: 1px solid #ffcdd2;
-    }
+    mat-card-content {
+        padding: 8px !important;
 
-    &.severity-high {
-        background-color: #fff3e0;
-        color: #ef6c00;
-        border: 1px solid #ffcc02;
-    }
+        h3 {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #3f51b5;
+            line-height: 1;
+        }
 
-    &.severity-medium {
-        background-color: #e8f5e8;
-        color: #2e7d32;
-        border: 1px solid #c8e6c9;
-    }
-
-    &.severity-low {
-        background-color: #e3f2fd;
-        color: #1565c0;
-        border: 1px solid #bbdefb;
+        p {
+            margin: 2px 0 0 0;
+            font-size: 0.7rem;
+            color: #666;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.2px;
+            line-height: 1;
+        }
     }
 }

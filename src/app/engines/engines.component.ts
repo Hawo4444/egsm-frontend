@@ -29,8 +29,8 @@ interface AggregationJob {
 export class EnginesComponent {
   instanceEventSubscription: any
   instanceAggregatorEventSubscription: any
-  typeAggregationEventSubscription: any // New: for aggregation HTTP responses
-  typeAggregationModeSubscription: any // New: for aggregation WebSocket updates
+  typeAggregationEventSubscription: any
+  typeAggregationModeSubscription: any
 
   currentProcessType: string
   currentProcessId: string
@@ -41,7 +41,7 @@ export class EnginesComponent {
   diagramOverlays: BpmnBlockOverlayReport[] = []
 
   aggregator: AggregatorConnector = new AggregatorConnector()
-  aggregationAggregator: AggregatorConnector = new AggregatorConnector() // New: separate aggregator for aggregation mode
+  aggregationAggregator: AggregatorConnector = new AggregatorConnector()
 
   isResult: boolean = false
   viewMode: 'instance' | 'aggregation' = 'instance'
@@ -147,7 +147,6 @@ export class EnginesComponent {
     }
   }
 
-  // Handle aggregation HTTP responses (equivalent to applyUpdate for aggregation)
   applyAggregatorUpdate(update: any) {
     this.loadingService.setLoadningState(false)
 
@@ -160,7 +159,7 @@ export class EnginesComponent {
         host: agg.brokers[0]?.host || '',
         port: agg.brokers[0]?.port || 0
       }));
-      this.isResult = true // Show the aggregation list
+      this.isResult = true
     }
 
     if (update['complete_aggregation_data']) {
@@ -176,7 +175,6 @@ export class EnginesComponent {
     }
   }
 
-  // User action to switch to aggregation view (equivalent to onSearch)
   switchToAggregationView() {
     this.viewMode = 'aggregation'
 
@@ -204,14 +202,11 @@ export class EnginesComponent {
     this.requestAvailableAggregations()
   }
 
-  // User selects an aggregation job
   onAggregationSelected(processType: string) {
-    // Just request data - WebSocket connection will happen in applyAggregatorUpdate()
     this.currentProcessType = processType
     this.requestAggregationData(processType)
   }
 
-  // Switch back to instance view
   switchToInstanceView() {
     this.viewMode = 'instance'
     this.isResult = false
@@ -238,7 +233,6 @@ export class EnginesComponent {
     this.currentProcessId = ''
   }
 
-  // New request methods (equivalent to requestProcessData)
   requestAvailableAggregations() {
     this.loadingService.setLoadningState(true)
     this.supervisorService.requestUpdate('aggregators', { request_type: 'available_aggregations' })
@@ -333,7 +327,6 @@ export class EnginesComponent {
     this.supervisorService.requestUpdate(MODULE_STORAGE_KEY, payload)
   }
 
-  // UI helper methods
   selectTab(index: number) {
     this.selectedTabIndex = index;
 
