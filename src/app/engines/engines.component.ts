@@ -343,27 +343,4 @@ export class EnginesComponent {
       }
     });
   }
-
-  getSeverityClass(deviationRate: number): string {
-    if (deviationRate >= 75) return 'critical';
-    if (deviationRate >= 50) return 'high';
-    if (deviationRate >= 25) return 'medium';
-    return 'low';
-  }
-
-  getPerspectiveColor(deviationRate: number): string {
-    if (deviationRate >= 75) return 'warn';
-    if (deviationRate >= 50) return 'accent';
-    if (deviationRate >= 25) return 'primary';
-    return 'primary';
-  }
-
-  getStatusColor(status: string): string {
-    switch (status) {
-      case 'ACTIVE': return 'primary';
-      case 'INACTIVE': return 'warn';
-      case 'STARTING': return 'accent';
-      default: return 'basic';
-    }
-  }
 }
