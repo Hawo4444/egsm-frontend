@@ -1,19 +1,17 @@
-<div class="content">
-    <!-- Mode Toggle with basic buttons -->
-    <div class="view-mode-toggle" style="margin-bottom: 20px;">
+<div class="mat-elevation-z8">
+    <div class="view-mode-toggle" style="margin-bottom: 10px;">
         <button mat-raised-button [color]="viewMode === 'instance' ? 'primary' : 'basic'"
-            (click)="switchToInstanceView()">
+            (click)="switchToInstanceView()" style="margin-left: 10px;">
             Instance View
         </button>
         <button mat-raised-button [color]="viewMode === 'aggregation' ? 'primary' : 'basic'"
-            (click)="switchToAggregationView('')" style="margin-left: 10px;">
+            (click)="switchToAggregationView()" style="margin-left: 10px; margin-top: 10px;">
             Aggregation View
         </button>
     </div>
 
     <!-- Instance View Section -->
     <div *ngIf="viewMode === 'instance'">
-        <!-- Existing instance search and controls -->
         <div class="search-section">
             <mat-form-field appearance="outline">
                 <mat-label>Process Instance ID</mat-label>
