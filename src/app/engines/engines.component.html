@@ -1,36 +1,61 @@
 <div class="mat-elevation-z8">
-    <div class="view-mode-toggle" style="margin-bottom: 10px;">
-        <button mat-raised-button [color]="viewMode === 'instance' ? 'primary' : 'basic'"
-            (click)="switchToInstanceView()" style="margin-left: 10px;">
-            Instance View
-        </button>
-        <button mat-raised-button [color]="viewMode === 'aggregation' ? 'primary' : 'basic'"
-            (click)="switchToAggregationView()" style="margin-left: 10px; margin-top: 10px;">
-            Aggregation View
-        </button>
-    </div>
-
-    <!-- Instance View Section -->
-    <div *ngIf="viewMode === 'instance'">
-        <div class="search-section">
-            <mat-form-field appearance="outline">
-                <mat-label>Process Instance ID</mat-label>
-                <input matInput #instanceInput placeholder="Enter instance ID">
-            </mat-form-field>
-            <button mat-raised-button color="primary" (click)="onSearch(instanceInput.value)"
-                style="margin-left: 10px;">
-                Search Instance
+    <mat-card class="input">
+        <div class="view-mode-toggle" style="margin-bottom: 10px;">
+            <button mat-raised-button [color]="viewMode === 'instance' ? 'primary' : 'basic'"
+                (click)="switchToInstanceView()">
+                Instance View
             </button>
-            <button mat-raised-button color="warn" *ngIf="currentProcessId" (click)="onDeleteProcess()"
-                style="margin-left: 10px;">
-                Delete Process
+            <button mat-raised-button [color]="viewMode === 'aggregation' ? 'primary' : 'basic'"
+                (click)="switchToAggregationView()" style="margin-left: 10px; margin-top: 10px;">
+                Aggregation View
             </button>
         </div>
+
+        <!-- Instance Search (like original) -->
+        <div *ngIf="viewMode === 'instance'" class="engine-id-container">
+            <mat-form-field appearance="fill">
+                <mat-label>Enter the Process Instance ID</mat-label>
+                <input (keyup.enter)="onSearch(instance_id.value)" #instance_id matInput placeholder="process_1"
+                    required>
+            </mat-form-field>
+            <br>
+            <button mat-raised-button (click)="onSearch(instance_id.value)" color="primary">Search</button>
+        </div>
+
+        <!-- Aggregation Selection -->
+        <div *ngIf="viewMode === 'aggregation'" class="engine-id-container">
+            <mat-form-field appearance="fill">
+                <mat-label>Select Process Type</mat-label>
+                <mat-select (selectionChange)="onAggregationSelected($event.value)">
+                    <mat-option *ngFor="let agg of availableAggregations" [value]="agg.process_type">
+                        {{agg.process_type}}
+                    </mat-option>
+                </mat-select>
+            </mat-form-field>
+        </div>
+    </mat-card>
+</div>
+
+<!-- Results Section (like original) -->
+<div [hidden]="!isResult" class="mat-elevation-z8">
+    <h2 *ngIf="viewMode === 'instance'">Included Process Engines</h2>
+    <h2 *ngIf="viewMode === 'aggregation'">Process Aggregation - {{currentProcessType}}</h2>
+
+    <!-- Engine List (only for instance view, like original) -->
+    <div class="mat-elevation-z8" *ngIf="viewMode === 'instance'">
+        <app-engine-list [hasSpinningBar]="false" #engines></app-engine-list>
+        <button mat-raised-button (click)="onDeleteProcess()" color="warn">Delete Process</button>
     </div>
 
-    <!-- Aggregation View Section -->
-    <div *ngIf="viewMode === 'aggregation' && currentProcessType" class="aggregation-summary">
-        <h4>Summary for {{currentProcessType}}</h4>
+    <!-- No BPMN job message (only for instance view) -->
+    <div [hidden]="currentBpmnJob != undefined || viewMode !== 'instance'" class="mat-elevation-z8">
+        <br>
+        <h2>BPMN diagram</h2>
+        <h3>No BPMN diagram job found for this process instance</h3>
+    </div>
+
+    <!-- Aggregation Summary (only for aggregation view) -->
+    <div *ngIf="viewMode === 'aggregation' && aggregationSummary" class="mat-elevation-z8">
         <div class="summary-cards">
             <mat-card class="summary-card">
                 <mat-card-content>
@@ -44,76 +69,48 @@
                     <p>Average Deviation Rate</p>
                 </mat-card-content>
             </mat-card>
-            <mat-card class="summary-card">
-                <mat-card-content>
-                    <h3>{{aggregationSummary.overall?.totalDeviations || 0}}</h3>
-                    <p>Total Deviations</p>
-                </mat-card-content>
-            </mat-card>
-            <mat-card class="summary-card">
-                <mat-card-content>
-                    <h3>{{aggregationSummary.perspectives?.length || 0}}</h3>
-                    <p>Perspectives</p>
-                </mat-card-content>
-            </mat-card>
         </div>
     </div>
+</div>
 
-    <!-- Results Section (Common for both views) -->
-    <div *ngIf="isResult">
-        <!-- Engine List (only for instance view) -->
-        <app-engine-list #engines *ngIf="viewMode === 'instance'"></app-engine-list>
-
-        <!-- BPMN Diagrams -->
-        <div class="diagram-section" *ngIf="diagramPerspectives.length > 0">
-            <h4 *ngIf="viewMode === 'aggregation'">
-                Aggregated View - {{currentProcessType}}
-            </h4>
-            <h4 *ngIf="viewMode === 'instance'">
-                Instance View - {{currentProcessId}}
-            </h4>
-
-            <!-- Simple tab implementation -->
-            <div class="simple-tabs">
-                <div class="tab-headers">
-                    <button *ngFor="let perspective of diagramPerspectives; let i = index" class="tab-header"
-                        [class.active]="i === 0" (click)="selectTab(i)">
-                        {{perspective.name}}
-                    </button>
+<!-- BPMN Diagrams for Instance View (exactly like original) -->
+<ng-container *ngIf="viewMode === 'instance'">
+    <div [hidden]="currentBpmnJob == undefined" *ngFor="let perspective of diagramPerspectives">
+        <br>
+        <div class="mat-elevation-z8">
+            <mat-card class="bpmn-container">
+                <div class="bpmn-container">
+                    <app-bpmn [show_statistics]="false" [model_id]="perspective.name" [model_xml]="perspective.bpmn_xml"
+                        (DiagramEventEmitter)="onDiagramEvent($event)" #bpmn_diagrams></app-bpmn>
                 </div>
+            </mat-card>
+        </div>
+        <br>
+    </div>
+</ng-container>
 
-                <div class="tab-content">
-                    <div *ngFor="let perspective of diagramPerspectives; let i = index"
-                        [style.display]="i === 0 ? 'block' : 'none'" class="tab-panel">
-
-                        <!-- Perspective-specific summary for aggregation view -->
-                        <div *ngIf="viewMode === 'aggregation' && aggregationSummary" class="perspective-summary">
-                            <ng-container *ngFor="let perspSummary of aggregationSummary.perspectives">
-                                <div *ngIf="perspSummary.perspective === perspective.name" class="perspective-stats">
-                                    <div class="stat-chips">
-                                        <span class="stat-chip"
-                                            [ngClass]="'severity-' + getSeverityClass(perspSummary.averageDeviationRate)">
-                                            {{(perspSummary.averageDeviationRate || 0) | number:'1.1-1'}}% avg deviation
-                                            rate
-                                        </span>
-                                        <span class="stat-chip">
-                                            {{perspSummary.stagesWithDeviations}}/{{perspSummary.totalStages}} stages
-                                            affected
-                                        </span>
-                                        <span class="stat-chip">
-                                            {{perspSummary.instancesWithDeviations}} instances with deviations
-                                        </span>
-                                    </div>
-                                </div>
-                            </ng-container>
-                        </div>
-
-                        <app-bpmn #bpmn_diagrams [model_xml]="perspective.bpmn_xml" [model_id]="perspective.name"
-                            [show_statistics]="false" (DiagramEventEmitter)="onDiagramEvent($event)">
-                        </app-bpmn>
-                    </div>
-                </div>
+<!-- BPMN Diagrams for Aggregation View (with tabs) -->
+<div *ngIf="viewMode === 'aggregation' && diagramPerspectives.length > 0">
+    <br>
+    <div class="mat-elevation-z8">
+        <div class="simple-tabs">
+            <div class="tab-headers">
+                <button *ngFor="let perspective of diagramPerspectives; let i = index" class="tab-header"
+                    [class.active]="i === 0" (click)="selectTab(i)">
+                    {{perspective.name}}
+                </button>
             </div>
         </div>
+
+        <div *ngFor="let perspective of diagramPerspectives; let i = index" [style.display]="i === 0 ? 'block' : 'none'"
+            class="tab-panel">
+            <mat-card class="bpmn-container">
+                <div class="bpmn-container">
+                    <app-bpmn [show_statistics]="false" [model_id]="perspective.name" [model_xml]="perspective.bpmn_xml"
+                        (DiagramEventEmitter)="onDiagramEvent($event)" #bpmn_diagrams></app-bpmn>
+                </div>
+            </mat-card>
+        </div>
     </div>
+    <br>
 </div>
