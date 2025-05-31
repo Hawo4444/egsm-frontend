@@ -42,6 +42,7 @@ import { NotificationsComponent } from './notifications/notifications.component'
 import { StakeholderDetailComponent } from './stakeholder-detail/stakeholder-detail.component';
 import { NewProcessGroupDialogComponent } from './new-process-group-dialog/new-process-group-dialog.component';
 import { BpmnComponent } from './bpmn/bpmn.component';
+import { AggregatedBpmnComponent } from './bpmn/aggregated-bpmn.component';
 import { MatGridListModule } from '@angular/material/grid-list';
 import { MatChipsModule } from '@angular/material/chips';
 import { ProcessTypeDetailsComponent } from './process-type-details/process-type-details.component';
@@ -68,6 +69,7 @@ import { ProcessTypeDetailsComponent } from './process-type-details/process-type
     StakeholderDetailComponent,
     NewProcessGroupDialogComponent,
     BpmnComponent,
+    AggregatedBpmnComponent,
     ProcessTypeDetailsComponent
   ],
   imports: [
