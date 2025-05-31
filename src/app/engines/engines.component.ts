@@ -177,13 +177,29 @@ export class EnginesComponent {
   // New: User action to switch to aggregation view (equivalent to onSearch)
   switchToAggregationView() {
     this.viewMode = 'aggregation'
-    // Just request data - subscription already exists
+
+    // Clean up instance view data
+    if (this.currentBpmnJob) {
+      this.aggregatorEventSubscription.unsubscribe()
+      this.aggregator.disconnect()
+      this.currentBpmnJob = undefined
+    }
+
+    // Clear instance-specific data
+    this.diagramPerspectives = []
+    this.diagramOverlays = []
+    this.currentProcessId = ''
+    this.currentProcessType = ''
+    this.isResult = false
+
+    // Request aggregation data
     this.requestAvailableAggregations()
   }
 
   // New: User selects an aggregation job (equivalent to process instance selection)
   onAggregationSelected(processType: string) {
     // Just request data - WebSocket connection will happen in applyAggregatorUpdate()
+    this.currentProcessType = processType
     this.requestAggregationData(processType)
   }
 
@@ -203,10 +219,15 @@ export class EnginesComponent {
       }
       this.aggregationAggregator.disconnect()
       this.currentAggregationJob = undefined
-      this.diagramPerspectives = []
-      this.diagramOverlays = []
-      this.aggregationSummary = undefined
     }
+
+    // Clear aggregation-specific data
+    this.diagramPerspectives = []
+    this.diagramOverlays = []
+    this.aggregationSummary = undefined
+    this.availableAggregations = []
+    this.currentProcessType = ''
+    this.currentProcessId = ''
   }
 
   // New request methods (equivalent to requestProcessData)

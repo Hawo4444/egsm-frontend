@@ -39,7 +39,7 @@
 <!-- Results Section -->
 <div [hidden]="!isResult" class="mat-elevation-z8">
     <h2 *ngIf="viewMode === 'instance'">Included Process Engines</h2>
-    <h2 *ngIf="viewMode === 'aggregation'">Process Aggregation - {{currentProcessType}}</h2>
+    <h2 *ngIf="viewMode === 'aggregation' && currentProcessType">Process Aggregation - {{currentProcessType}}</h2>
     <div class="mat-elevation-z8" *ngIf="viewMode === 'instance'">
         <app-engine-list [hasSpinningBar]="false" #engines></app-engine-list>
         <button mat-raised-button (click)="onDeleteProcess()" color="warn">Delete Process</button>
