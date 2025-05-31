@@ -259,9 +259,16 @@ export class EnginesComponent {
 
   applyOverlaysToGraphics() {
     this.diagramOverlays.forEach(overlay => {
-      var diagram = this.bpmnDiagrams.find(element => element.model_id == overlay.perspective)
-      if (diagram) {
-        diagram.applyOverlayReport([overlay])
+      if (this.viewMode === 'instance') {
+        var diagram = this.bpmnDiagrams.find(element => element.model_id == overlay.perspective)
+        if (diagram) {
+          diagram.applyOverlayReport([overlay])
+        }
+      } else if (this.viewMode === 'aggregation') {
+        var aggregatedDiagram = this.aggregatedBpmnDiagrams.find(element => element.model_id == overlay.perspective)
+        if (aggregatedDiagram) {
+          aggregatedDiagram.applyAggregatedOverlayReport([overlay])
+        }
       }
     });
   }

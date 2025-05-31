@@ -110,8 +110,8 @@
             class="tab-panel">
             <mat-card class="bpmn-container">
                 <div class="bpmn-container">
-                    <app-bpmn [show_statistics]="false" [model_id]="perspective.name" [model_xml]="perspective.bpmn_xml"
-                        (DiagramEventEmitter)="onDiagramEvent($event)" #bpmn_diagrams></app-bpmn>
+                    <app-aggregated-bpmn [model_id]="perspective.name" [model_xml]="perspective.bpmn_xml"
+                        (DiagramEventEmitter)="onDiagramEvent($event)" #aggregated_bpmn_diagrams></app-aggregated-bpmn>
                 </div>
             </mat-card>
         </div>
