@@ -72,6 +72,9 @@ export class SupervisorService {
       case 'process_type_detail':
         this.ProcessTypeDetailEventEmitter.next(msg['payload'])
         break
+      case 'available_aggregations':
+        this.AggregatorEventEmitter.next(msg['payload'])
+        break
     }
   }
 

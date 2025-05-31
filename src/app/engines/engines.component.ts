@@ -11,6 +11,14 @@ import { SupervisorService } from '../supervisor.service';
 
 const MODULE_STORAGE_KEY = 'process_operation'
 
+interface AggregationJob {
+  job_id: string;
+  job_type: string;
+  process_type: string;
+  perspectives: string[];
+  status: string;
+}
+
 @Component({
   selector: 'app-engines',
   templateUrl: './engines.component.html',
@@ -27,6 +35,14 @@ export class EnginesComponent {
   aggregator: AggregatorConnector = new AggregatorConnector()
   isResult: boolean = false
 
+  // New aggregation properties
+  viewMode: 'instance' | 'aggregation' = 'instance'
+  availableAggregations: AggregationJob[] = []
+  currentAggregationJob: any = undefined
+  aggregationSummary: any = undefined
+
+  selectedTabIndex = 0;
+
   @ViewChild('engines') engineList: EngineListComponent
   @ViewChildren('bpmn_diagrams') bpmnDiagrams: BpmnComponent[]
 
@@ -34,6 +50,16 @@ export class EnginesComponent {
     this.eventSubscription = this.supervisorService.ProcessSearchEventEmitter.subscribe((update: any) => {
       this.applyUpdate(update)
     })
+
+    // Subscribe to aggregator updates
+    this.supervisorService.AggregatorEventEmitter.subscribe((update: any) => {
+      this.applyAggregatorUpdate(update)
+    })
+  }
+
+  ngOnInit() {
+    // Request available aggregation jobs on component init
+    this.requestAvailableAggregations()
   }
 
   ngOnDestroy() {
@@ -48,11 +74,14 @@ export class EnginesComponent {
     this.loadingService.setLoadningState(false)
     var engines = update['engines'] || undefined
     var deleteResult = update['delete_result'] || undefined
+
     if (engines != undefined && engines.length > 0) {
       this.engineList.update(update['engines'])
       this.isResult = true
       this.currentProcessType = update['engines'][0].type
-      if (update['bpmn_job'] != 'not_found') {
+
+      // Only run when in instance mode
+      if (this.viewMode === 'instance' && update['bpmn_job'] != 'not_found') {
         this.currentBpmnJob = update['bpmn_job']
         this.aggregator.connect(this.currentBpmnJob.host, this.currentBpmnJob.port)
         var timeout = undefined
@@ -73,9 +102,6 @@ export class EnginesComponent {
             else {
               this.diagramPerspectives = data['update']['perspectives'] as ProcessPerspective[]
             }
-
-
-
           }
           if (data['update']?.['overlays'] != undefined) {
             var overlays = data['update']['overlays'] as BpmnBlockOverlayReport[]
@@ -85,8 +111,7 @@ export class EnginesComponent {
         });
         this.aggregator.subscribeJob(this.currentBpmnJob.job_id)
       }
-    }
-    else if (engines != undefined) {
+    } else if (engines != undefined) {
       this.snackBar.open(`The requested Process Instance not found!`, "Hide", { duration: 2000 });
       this.isResult = false
     }
@@ -98,20 +123,100 @@ export class EnginesComponent {
         this.isResult = false
       }
       else {
-        //this.snackBar.open(`Server error occurred while deleting the process`, "Hide", { duration: 2000 });
         this.isResult = false
       }
     }
   }
 
-  /**
-   * Initiates a search on the back-end for the process specified by 'instance_id'
-   * @param instance_id Id of the requested Process Instance
-   */
+  applyAggregatorUpdate(update: any) {
+    if (!update) {
+      console.warn('Received undefined update in applyAggregatorUpdate');
+      return;
+    }
+
+    console.log('Aggregator update received:', update);
+
+    if (update['payload']?.['available_aggregations']) {
+      this.availableAggregations = update['payload']['available_aggregations']
+    }
+
+    // Handle complete aggregation data
+    if (update['complete_aggregation_data'] && this.viewMode === 'aggregation') {
+      const data = update['complete_aggregation_data'];
+      this.diagramPerspectives = data.perspectives || [];
+      this.diagramOverlays = data.overlays || [];
+      this.aggregationSummary = data.summary || {};
+
+      // Apply overlays after perspectives are set
+      setTimeout(() => {
+        this.applyOverlaysToGraphics();
+      }, 500);
+
+      this.loadingService.setLoadningState(false);
+    }
+  }
+
+  switchToAggregationView(processType: string) {
+    this.viewMode = 'aggregation'
+    this.currentProcessType = processType
+    this.isResult = true
+
+    // Disconnect from instance view if connected
+    if (this.currentBpmnJob) {
+      this.aggregatorEventSubscription.unsubscribe()
+      this.aggregator.disconnect()
+      this.currentBpmnJob = undefined
+    }
+
+    // Request aggregation data
+    this.requestAggregationData(processType)
+  }
+
+  switchToInstanceView() {
+    this.viewMode = 'instance'
+    this.currentAggregationJob = undefined
+    this.aggregationSummary = undefined
+  }
+
+  requestAvailableAggregations() {
+    this.supervisorService.requestUpdate('aggregators', { request_type: 'available_aggregations' })
+  }
+
+  requestAggregationData(processType: string) {
+    this.loadingService.setLoadningState(true);
+    const payload = {
+      request_type: 'complete_aggregation_data',
+      process_type: processType
+    };
+    this.supervisorService.requestUpdate('aggregators', payload);
+  }
+
+  onAggregationSelected(processType: string) {
+    this.switchToAggregationView(processType)
+  }
+
+  getAggregationForProcessType(processType: string): AggregationJob | undefined {
+    return this.availableAggregations.find(agg => agg.process_type === processType)
+  }
+
+  applyOverlaysToGraphics() {
+    setTimeout(() => {
+      this.diagramOverlays.forEach(overlay => {
+        var diagram = this.bpmnDiagrams.find(element => element.model_id == overlay.perspective)
+        if (diagram) {
+          diagram.applyOverlayReport([overlay])
+        }
+      });
+    }, 1000);
+  }
+
+  // Original methods with minimal modifications
   onSearch(instance_id: any) {
     this.snackBar.dismiss()
     this.currentProcessId = instance_id
+    this.viewMode = 'instance'  // Ensure we're in instance mode
     this.requestProcessData()
+
     if (this.currentBpmnJob) {
       this.aggregatorEventSubscription.unsubscribe()
       this.aggregator.disconnect()
@@ -151,15 +256,7 @@ export class EnginesComponent {
    */
   onDiagramEvent(event: string) {
     if (event == 'INIT_DONE') {
-      var context = this
-      setTimeout(function () {
-        context.diagramOverlays.forEach(overlay => {
-          var diagram = context.bpmnDiagrams.find(element => element.model_id == overlay.perspective)
-          if (diagram) {
-            diagram.applyOverlayReport([overlay])
-          }
-        });
-      }, 1000);
+      this.applyOverlaysToGraphics()
     }
   }
 
@@ -181,5 +278,48 @@ export class EnginesComponent {
       process_instance_id: this.currentProcessId
     }
     this.supervisorService.requestUpdate(MODULE_STORAGE_KEY, payload)
+  }
+
+  // UI helper methods
+  selectTab(index: number) {
+    this.selectedTabIndex = index;
+
+    const tabPanels = document.querySelectorAll('.tab-panel');
+    const tabHeaders = document.querySelectorAll('.tab-header');
+
+    tabPanels.forEach((panel, i) => {
+      (panel as HTMLElement).style.display = i === index ? 'block' : 'none';
+    });
+
+    tabHeaders.forEach((header, i) => {
+      if (i === index) {
+        header.classList.add('active');
+      } else {
+        header.classList.remove('active');
+      }
+    });
+  }
+
+  getSeverityClass(deviationRate: number): string {
+    if (deviationRate >= 75) return 'critical';
+    if (deviationRate >= 50) return 'high';
+    if (deviationRate >= 25) return 'medium';
+    return 'low';
+  }
+
+  getPerspectiveColor(deviationRate: number): string {
+    if (deviationRate >= 75) return 'warn';
+    if (deviationRate >= 50) return 'accent';
+    if (deviationRate >= 25) return 'primary';
+    return 'primary';
+  }
+
+  getStatusColor(status: string): string {
+    switch (status) {
+      case 'ACTIVE': return 'primary';
+      case 'INACTIVE': return 'warn';
+      case 'STARTING': return 'accent';
+      default: return 'basic';
+    }
   }
 }
