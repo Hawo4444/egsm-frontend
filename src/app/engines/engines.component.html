@@ -6,12 +6,12 @@
                 Instance View
             </button>
             <button mat-raised-button [color]="viewMode === 'aggregation' ? 'primary' : 'basic'"
-                (click)="switchToAggregationView()" style="margin-left: 10px; margin-top: 10px;">
+                (click)="switchToAggregationView()" style="margin-left: 10px;">
                 Aggregation View
             </button>
         </div>
 
-        <!-- Instance Search (like original) -->
+        <!-- Instance Search -->
         <div *ngIf="viewMode === 'instance'" class="engine-id-container">
             <mat-form-field appearance="fill">
                 <mat-label>Enter the Process Instance ID</mat-label>
@@ -36,25 +36,21 @@
     </mat-card>
 </div>
 
-<!-- Results Section (like original) -->
+<!-- Results Section -->
 <div [hidden]="!isResult" class="mat-elevation-z8">
     <h2 *ngIf="viewMode === 'instance'">Included Process Engines</h2>
     <h2 *ngIf="viewMode === 'aggregation'">Process Aggregation - {{currentProcessType}}</h2>
-
-    <!-- Engine List (only for instance view, like original) -->
     <div class="mat-elevation-z8" *ngIf="viewMode === 'instance'">
         <app-engine-list [hasSpinningBar]="false" #engines></app-engine-list>
         <button mat-raised-button (click)="onDeleteProcess()" color="warn">Delete Process</button>
     </div>
-
-    <!-- No BPMN job message (only for instance view) -->
     <div [hidden]="currentBpmnJob != undefined || viewMode !== 'instance'" class="mat-elevation-z8">
         <br>
         <h2>BPMN diagram</h2>
         <h3>No BPMN diagram job found for this process instance</h3>
     </div>
 
-    <!-- Aggregation Summary (only for aggregation view) -->
+    <!-- Aggregation Summary -->
     <div *ngIf="viewMode === 'aggregation' && aggregationSummary" class="mat-elevation-z8">
         <div class="summary-cards">
             <mat-card class="summary-card">
@@ -73,7 +69,7 @@
     </div>
 </div>
 
-<!-- BPMN Diagrams for Instance View (exactly like original) -->
+<!-- BPMN Diagrams for Instance View -->
 <ng-container *ngIf="viewMode === 'instance'">
     <div [hidden]="currentBpmnJob == undefined" *ngFor="let perspective of diagramPerspectives">
         <br>
@@ -89,7 +85,7 @@
     </div>
 </ng-container>
 
-<!-- BPMN Diagrams for Aggregation View (with tabs) -->
+<!-- BPMN Diagrams for Aggregation View -->
 <div *ngIf="viewMode === 'aggregation' && diagramPerspectives.length > 0">
     <br>
     <div class="mat-elevation-z8">
