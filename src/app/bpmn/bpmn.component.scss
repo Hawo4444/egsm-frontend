@@ -4,3 +4,35 @@
   height: 100%;
   width: 80%;
 }
+
+::ng-deep .djs-bendpoints {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+::ng-deep .djs-bendpoint {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+::ng-deep .djs-segment-dragger {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+::ng-deep .layer-overlays .djs-bendpoints {
+  display: none !important;
+}
+
+::ng-deep .layer-overlays .djs-bendpoint {
+  display: none !important;
+}
+
+::ng-deep .layer-overlays .djs-segment-dragger {
+  display: none !important;
+}
+
+::ng-deep .djs-overlay-container .djs-bendpoints {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
