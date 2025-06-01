@@ -58,10 +58,16 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
 
         eventBus.on('element.hover', function (e) {
             var elementId = e.element.id
-            var stageData = context.getStageAggregationData(elementId);
-
-            if (stageData) {
+            
+            // Check if this element has block properties (meaning it's a tracked BPMN element)
+            if (context.blockProperties.has(elementId) || 
+                e.element.type?.includes('Task') || 
+                e.element.type?.includes('Event') || 
+                e.element.type?.includes('Gateway')) {
+                
+                var stageData = context.getStageAggregationData(elementId);
                 var overlay = bpmnJsRef.get('overlays');
+                
                 if (context.visibleOverlays.has('aggregation-overlay')) {
                     overlay.remove(context.visibleOverlays.get('aggregation-overlay'))
                     context.visibleOverlays.delete('aggregation-overlay')
@@ -422,6 +428,23 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
     createAggregationTooltip(elementId: string, stageData: any): string {
         const elementName = this.elementNamesMap.get(elementId) || elementId;
 
+        // Handle case where no stage data is available
+        if (!stageData) {
+            return `<div style="
+        width: 250px; 
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 5px;
+        padding: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      ">
+        <h3 style="margin: 0 0 10px 0; color: #495057;">${elementName}</h3>
+        <div style="color: #6c757d; font-style: italic;">
+          No aggregation data available
+        </div>
+      </div>`;
+        }
+
         return `<div style="
       width: 350px; 
       background-color: #f8f9fa;
@@ -433,9 +456,9 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
       <h3 style="margin: 0 0 10px 0; color: #495057;">${elementName} - Aggregated</h3>
       <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
         <div>
-          <strong>Total Instances:</strong> ${stageData.totalInstances}<br>
-          <strong>With Deviations:</strong> ${stageData.instancesWithDeviations}<br>
-          <strong>Deviation Rate:</strong> ${stageData.deviationRate?.toFixed(1)}%
+          <strong>Total Instances:</strong> ${stageData.totalInstances || 0}<br>
+          <strong>With Deviations:</strong> ${stageData.instancesWithDeviations || 0}<br>
+          <strong>Deviation Rate:</strong> ${(stageData.deviationRate || 0).toFixed(1)}%
         </div>
         <div>
           ${this.formatDeviationCounts(stageData.deviationCounts)}
@@ -578,7 +601,6 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
         visited.add(element.id);
 
         // Check if this is a gateway with multiple incoming connections
-        // This is a common pattern for loop end gateways
         if (element.type.includes('Gateway') && element.incoming && element.incoming.length > 1) {
             return element;
         }

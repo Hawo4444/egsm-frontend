@@ -10,6 +10,8 @@ export class AggregatorConnector {
     socket = undefined
     observable = undefined
     public eventEmitter:EventEmitter<any>
+    private subscription: any = null
+    private connected: boolean = false
 
     constructor() { }
 
@@ -26,6 +28,7 @@ export class AggregatorConnector {
             error: err => console.log(err),
             complete: () => console.log('Disconnected from Aggregator')
         });
+        this.connected = true
     }
 
     /**
@@ -33,7 +36,11 @@ export class AggregatorConnector {
      */
     disconnect() {
         console.log('Disconnecting from Aggregator')
-        this.observable.unsubscribe()
+        if (this.subscription) {
+            this.subscription.unsubscribe()
+            this.subscription = null
+        }
+        this.connected = false
     }
 
     messageHandler(msg: any) {
@@ -58,5 +65,9 @@ export class AggregatorConnector {
 
     getEventEmitter(){
         return this.eventEmitter
+    }
+
+    isConnected(): boolean {
+        return this.connected
     }
 }

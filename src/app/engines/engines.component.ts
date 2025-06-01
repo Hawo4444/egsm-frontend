@@ -27,10 +27,12 @@ interface AggregationJob {
   styleUrls: ['./engines.component.scss']
 })
 export class EnginesComponent {
-  instanceEventSubscription: any
-  instanceAggregatorEventSubscription: any
-  typeAggregationEventSubscription: any
-  typeAggregationModeSubscription: any
+  // HTTP-based subscriptions for initial setup
+  instanceHttpSubscription: any
+  aggregationHttpSubscription: any
+  
+  // WebSocket-based subscription for real-time updates
+  realtimeJobSubscription: any
 
   currentProcessType: string
   currentProcessId: string
@@ -41,7 +43,6 @@ export class EnginesComponent {
   diagramOverlays: BpmnBlockOverlayReport[] = []
 
   aggregator: AggregatorConnector = new AggregatorConnector()
-  aggregationAggregator: AggregatorConnector = new AggregatorConnector()
 
   isResult: boolean = false
   viewMode: 'instance' | 'aggregation' = 'instance'
@@ -49,35 +50,29 @@ export class EnginesComponent {
   aggregationSummary: any = undefined
 
   selectedTabIndex = 0;
+  private updateTimeout: any = undefined
 
   @ViewChild('engines') engineList: EngineListComponent
   @ViewChildren('bpmn_diagrams') bpmnDiagrams: BpmnComponent[]
   @ViewChildren('aggregated_bpmn_diagrams') aggregatedBpmnDiagrams: AggregatedBpmnComponent[]
 
   constructor(private supervisorService: SupervisorService, private snackBar: MatSnackBar, private loadingService: LoadingService, public deleteProcessDialog: MatDialog) {
-    this.instanceEventSubscription = this.supervisorService.ProcessSearchEventEmitter.subscribe((update: any) => {
+    this.instanceHttpSubscription = this.supervisorService.ProcessSearchEventEmitter.subscribe((update: any) => {
       this.applyUpdate(update)
     })
 
-    this.typeAggregationEventSubscription = this.supervisorService.AggregatorEventEmitter.subscribe((update: any) => {
+    this.aggregationHttpSubscription = this.supervisorService.AggregatorEventEmitter.subscribe((update: any) => {
       this.applyAggregatorUpdate(update)
     })
   }
 
   ngOnDestroy() {
-    this.instanceEventSubscription.unsubscribe()
-    if (this.currentBpmnJob) {
-      this.instanceAggregatorEventSubscription.unsubscribe()
-      this.aggregator.disconnect()
-    }
-    if (this.typeAggregationEventSubscription) {
-      this.typeAggregationEventSubscription.unsubscribe()
-    }
-    if (this.currentAggregationJob) {
-      if (this.typeAggregationModeSubscription) {
-        this.typeAggregationModeSubscription.unsubscribe()
-      }
-      this.aggregationAggregator.disconnect()
+    this.instanceHttpSubscription?.unsubscribe()
+    this.aggregationHttpSubscription?.unsubscribe()
+    this._disconnectCurrentJob()
+    
+    if (this.updateTimeout) {
+      clearTimeout(this.updateTimeout)
     }
   }
 
@@ -103,31 +98,7 @@ export class EnginesComponent {
 
       if (update['bpmn_job'] != 'not_found') {
         this.currentBpmnJob = update['bpmn_job']
-        this.aggregator.connect(this.currentBpmnJob.host, this.currentBpmnJob.port)
-        var timeout = undefined
-        this.instanceAggregatorEventSubscription = this.aggregator.getEventEmitter().subscribe((data) => {
-          if (data['update']?.['perspectives'] != undefined) {
-            if (this.diagramPerspectives.length != 0) {
-              if (timeout != undefined) {
-                clearTimeout(timeout)
-                timeout = undefined
-              }
-              var context = this
-              timeout = setTimeout(function () {
-                context.diagramPerspectives = data['update']['perspectives'] as ProcessPerspective[]
-                timeout = undefined
-              }, 1000);
-            }
-            else {
-              this.diagramPerspectives = data['update']['perspectives'] as ProcessPerspective[]
-            }
-          }
-          if (data['update']?.['overlays'] != undefined) {
-            var overlays = data['update']['overlays'] as BpmnBlockOverlayReport[]
-            this.diagramOverlays = overlays
-          }
-        });
-        this.aggregator.subscribeJob(this.currentBpmnJob.job_id)
+        this._connectToJob(this.currentBpmnJob)
       }
     }
     else if (engines != undefined) {
@@ -140,6 +111,7 @@ export class EnginesComponent {
         this.snackBar.open(`The process has been deleted`, "Hide", { duration: 2000 });
         this.currentBpmnJob = undefined
         this.isResult = false
+        this._disconnectCurrentJob()
       }
       else {
         this.isResult = false
@@ -178,25 +150,16 @@ export class EnginesComponent {
   switchToAggregationView() {
     this.viewMode = 'aggregation'
 
-    // Clean up instance view data
-    if (this.currentBpmnJob) {
-      this.instanceAggregatorEventSubscription.unsubscribe()
-      this.aggregator.disconnect()
-      this.currentBpmnJob = undefined
-    }
+    // Clean up current job connection
+    this._disconnectCurrentJob()
 
     // Clear instance-specific data
     this.diagramPerspectives = []
     this.diagramOverlays = []
     this.currentProcessId = ''
     this.currentProcessType = ''
+    this.currentBpmnJob = undefined
     this.isResult = false
-
-    if (!this.typeAggregationEventSubscription) {
-      this.typeAggregationEventSubscription = this.supervisorService.AggregatorEventEmitter.subscribe((update: any) => {
-        this.applyAggregatorUpdate(update)
-      })
-    }
 
     // Request aggregation data
     this.requestAvailableAggregations()
@@ -204,6 +167,18 @@ export class EnginesComponent {
 
   onAggregationSelected(processType: string) {
     this.currentProcessType = processType
+    
+    // Find and connect to the aggregation job
+    const aggregationJob = this.getAggregationForProcessType(processType)
+    if (aggregationJob) {
+      this.currentAggregationJob = aggregationJob
+      this._connectToJob(aggregationJob)
+      console.log('Connected to aggregation job:', aggregationJob.job_id)
+    } else {
+      console.warn('No aggregation job found for process type:', processType)
+    }
+    
+    // Request initial data via HTTP
     this.requestAggregationData(processType)
   }
 
@@ -211,18 +186,8 @@ export class EnginesComponent {
     this.viewMode = 'instance'
     this.isResult = false
 
-    // Clean up aggregation mode
-    if (this.typeAggregationEventSubscription) {
-      this.typeAggregationEventSubscription.unsubscribe()
-      this.typeAggregationEventSubscription = undefined
-    }
-    if (this.currentAggregationJob) {
-      if (this.typeAggregationModeSubscription) {
-        this.typeAggregationModeSubscription.unsubscribe()
-      }
-      this.aggregationAggregator.disconnect()
-      this.currentAggregationJob = undefined
-    }
+    // Clean up current job connection
+    this._disconnectCurrentJob()
 
     // Clear aggregation-specific data
     this.diagramPerspectives = []
@@ -231,6 +196,7 @@ export class EnginesComponent {
     this.availableAggregations = []
     this.currentProcessType = ''
     this.currentProcessId = ''
+    this.currentAggregationJob = undefined
   }
 
   requestAvailableAggregations() {
@@ -273,12 +239,10 @@ export class EnginesComponent {
     this.viewMode = 'instance' // Ensure instance mode
     this.requestProcessData()
 
-    if (this.currentBpmnJob) {
-      this.instanceAggregatorEventSubscription.unsubscribe()
-      this.aggregator.disconnect()
-      this.currentBpmnJob = undefined
-      this.diagramPerspectives = []
-    }
+    // Clean up any existing connection
+    this._disconnectCurrentJob()
+    this.diagramPerspectives = []
+    this.currentBpmnJob = undefined
   }
 
   onDeleteProcess() {
@@ -344,5 +308,82 @@ export class EnginesComponent {
         header.classList.remove('active');
       }
     });
+  }
+
+  private _connectToJob(job: any) {
+    if (!job) {
+      console.warn('No job provided for connection')
+      return
+    }
+    
+    console.log('Connecting to job:', job.job_id, 'at', job.host + ':' + job.port)
+    
+    // Disconnect any existing connection first
+    this._disconnectCurrentJob()
+    
+    // Connect to the job's WebSocket
+    this.aggregator.connect(job.host, job.port)
+    
+    // Subscribe to job events
+    this.realtimeJobSubscription = this.aggregator.getEventEmitter().subscribe((data) => {
+      this._handleJobUpdate(data)
+    })
+    
+    // Subscribe to the specific job
+    this.aggregator.subscribeJob(job.job_id)
+  }
+
+  private _disconnectCurrentJob() {
+    if (this.realtimeJobSubscription) {
+      console.log('Disconnecting from current job')
+      this.realtimeJobSubscription.unsubscribe()
+      this.realtimeJobSubscription = null
+    }
+    
+    // Only disconnect if we have an active connection
+    if (this.aggregator && this.aggregator.isConnected()) {
+      this.aggregator.disconnect()
+    }
+  }
+
+  private _handleJobUpdate(data: any) {
+    console.log('Received job update:', data)
+    
+    // Handle perspective updates
+    if (data['update']?.['perspectives'] != undefined) {
+      if (this.diagramPerspectives.length != 0) {
+        // If we already have perspectives, use timeout to avoid rapid updates
+        if (this.updateTimeout != undefined) {
+          clearTimeout(this.updateTimeout)
+          this.updateTimeout = undefined
+        }
+        var context = this
+        this.updateTimeout = setTimeout(function () {
+          context.diagramPerspectives = data['update']['perspectives'] as ProcessPerspective[]
+          context.updateTimeout = undefined
+          console.log('Updated perspectives (delayed):', context.diagramPerspectives.length)
+        }, 1000);
+      } else {
+        this.diagramPerspectives = data['update']['perspectives'] as ProcessPerspective[]
+        console.log('Updated perspectives (immediate):', this.diagramPerspectives.length)
+      }
+    }
+    
+    // Handle overlay updates
+    if (data['update']?.['overlays'] != undefined) {
+      this.diagramOverlays = data['update']['overlays'] as BpmnBlockOverlayReport[]
+      console.log('Updated overlays:', this.diagramOverlays.length)
+      
+      // Apply overlays immediately for overlays
+      setTimeout(() => {
+        this.applyOverlaysToGraphics()
+      }, 100)
+    }
+    
+    // Aggregation-specific data
+    if (this.viewMode === 'aggregation' && data['update']?.['summary'] != undefined) {
+      this.aggregationSummary = data['update']['summary']
+      console.log('Updated aggregation summary:', this.aggregationSummary)
+    }
   }
 }
