@@ -79,7 +79,7 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
                         top: -25,
                         right: 0
                     },
-                    html: context.createAggregationTooltip(elementId, stageData)
+                    html: `<div style="z-index: 1000; position: relative;">${context.createAggregationTooltip(elementId, stageData)}</div>`
                 }));
             }
         })
