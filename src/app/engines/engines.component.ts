@@ -30,7 +30,7 @@ export class EnginesComponent {
   // HTTP-based subscriptions for initial setup
   instanceHttpSubscription: any
   aggregationHttpSubscription: any
-  
+
   // WebSocket-based subscription for real-time updates
   realtimeJobSubscription: any
 
@@ -70,7 +70,7 @@ export class EnginesComponent {
     this.instanceHttpSubscription?.unsubscribe()
     this.aggregationHttpSubscription?.unsubscribe()
     this._disconnectCurrentJob()
-    
+
     if (this.updateTimeout) {
       clearTimeout(this.updateTimeout)
     }
@@ -99,17 +99,19 @@ export class EnginesComponent {
       if (update['bpmn_job'] != 'not_found') {
         this.currentBpmnJob = update['bpmn_job']
         this._connectToJob(this.currentBpmnJob)
+      } else {
+        this.currentBpmnJob = undefined
       }
     }
     else if (engines != undefined) {
       this.snackBar.open(`The requested Process Instance not found!`, "Hide", { duration: 2000 });
       this.isResult = false
+      this.currentBpmnJob = undefined
     }
 
     if (deleteResult) {
       if (deleteResult == "ok") {
         this.snackBar.open(`The process has been deleted`, "Hide", { duration: 2000 });
-        this.currentBpmnJob = undefined
         this.isResult = false
         this._disconnectCurrentJob()
       }
@@ -117,6 +119,40 @@ export class EnginesComponent {
         this.isResult = false
       }
     }
+  }
+
+  switchToAggregationView() {
+    this.viewMode = 'aggregation'
+    
+    this.loadingService.setLoadningState(true)
+    this._disconnectCurrentJob()
+
+    // Clear instance-specific data
+    this.diagramPerspectives = []
+    this.diagramOverlays = []
+    this.currentProcessId = ''
+    this.currentProcessType = ''
+    this.currentBpmnJob = undefined
+    this.aggregationSummary = undefined
+
+    // Small delay to ensure cleanup is complete before requesting new data
+    setTimeout(() => {
+      this.requestAvailableAggregations()
+    }, 100)
+  }
+
+  onAggregationSelected(processType: string) {
+    this.currentProcessType = processType
+
+    const aggregationJob = this.getAggregationForProcessType(processType)
+    if (aggregationJob) {
+      this.currentAggregationJob = aggregationJob
+      this._connectToJob(aggregationJob)
+    } else {
+      console.warn('No aggregation job found for process type:', processType)
+    }
+
+    this.requestAggregationData(processType)
   }
 
   applyAggregatorUpdate(update: any) {
@@ -143,50 +179,14 @@ export class EnginesComponent {
 
       setTimeout(() => {
         this.applyOverlaysToGraphics();
-      }, 1000);
+      }, 500);
     }
-  }
-
-  switchToAggregationView() {
-    this.viewMode = 'aggregation'
-
-    // Clean up current job connection
-    this._disconnectCurrentJob()
-
-    // Clear instance-specific data
-    this.diagramPerspectives = []
-    this.diagramOverlays = []
-    this.currentProcessId = ''
-    this.currentProcessType = ''
-    this.currentBpmnJob = undefined
-    this.isResult = false
-
-    // Request aggregation data
-    this.requestAvailableAggregations()
-  }
-
-  onAggregationSelected(processType: string) {
-    this.currentProcessType = processType
-    
-    // Find and connect to the aggregation job
-    const aggregationJob = this.getAggregationForProcessType(processType)
-    if (aggregationJob) {
-      this.currentAggregationJob = aggregationJob
-      this._connectToJob(aggregationJob)
-      console.log('Connected to aggregation job:', aggregationJob.job_id)
-    } else {
-      console.warn('No aggregation job found for process type:', processType)
-    }
-    
-    // Request initial data via HTTP
-    this.requestAggregationData(processType)
   }
 
   switchToInstanceView() {
     this.viewMode = 'instance'
     this.isResult = false
 
-    // Clean up current job connection
     this._disconnectCurrentJob()
 
     // Clear aggregation-specific data
@@ -237,12 +237,19 @@ export class EnginesComponent {
     this.snackBar.dismiss()
     this.currentProcessId = instance_id
     this.viewMode = 'instance' // Ensure instance mode
-    this.requestProcessData()
 
-    // Clean up any existing connection
-    this._disconnectCurrentJob()
+    // Disconnect if we're switching between different instances or view modes
+    if (this.currentBpmnJob || this.currentAggregationJob) {
+      this._disconnectCurrentJob()
+    }
+
+    // Clear diagram data for new search
     this.diagramPerspectives = []
-    this.currentBpmnJob = undefined
+    this.diagramOverlays = []
+    this.isResult = false
+
+    // Request new process data
+    this.requestProcessData()
   }
 
   onDeleteProcess() {
@@ -269,8 +276,10 @@ export class EnginesComponent {
     if (event == 'INIT_DONE') {
       var context = this
       setTimeout(function () {
-        context.applyOverlaysToGraphics();
-      }, 1000);
+        if (context.diagramOverlays.length > 0) {
+          context.applyOverlaysToGraphics();
+        }
+      }, 300);
     }
   }
 
@@ -315,75 +324,99 @@ export class EnginesComponent {
       console.warn('No job provided for connection')
       return
     }
-    
-    console.log('Connecting to job:', job.job_id, 'at', job.host + ':' + job.port)
-    
-    // Disconnect any existing connection first
-    this._disconnectCurrentJob()
-    
+
+    // Disconnect any existing connection first (but don't clear job references)
+    if (this.realtimeJobSubscription) {
+      this.realtimeJobSubscription.unsubscribe()
+      this.realtimeJobSubscription = null
+    }
+    if (this.aggregator && this.aggregator.isConnected()) {
+      this.aggregator.disconnect()
+    }
+
     // Connect to the job's WebSocket
     this.aggregator.connect(job.host, job.port)
-    
-    // Subscribe to job events
+
+    // Subscribe to job events AFTER the job reference is set
     this.realtimeJobSubscription = this.aggregator.getEventEmitter().subscribe((data) => {
       this._handleJobUpdate(data)
     })
-    
-    // Subscribe to the specific job
+
+    // Subscribe to the specific job - this triggers immediate update
     this.aggregator.subscribeJob(job.job_id)
   }
 
   private _disconnectCurrentJob() {
+    const bpmnJobId = this.currentBpmnJob?.job_id
+    const aggregationJobId = this.currentAggregationJob?.job_id
+
+    if (bpmnJobId) {
+      this.aggregator.unsubscribeJob(bpmnJobId)
+    }
+    if (aggregationJobId) {
+      this.aggregator.unsubscribeJob(aggregationJobId)
+    }
+
     if (this.realtimeJobSubscription) {
-      console.log('Disconnecting from current job')
       this.realtimeJobSubscription.unsubscribe()
       this.realtimeJobSubscription = null
     }
-    
-    // Only disconnect if we have an active connection
+
     if (this.aggregator && this.aggregator.isConnected()) {
       this.aggregator.disconnect()
     }
+
+    this.currentBpmnJob = undefined
+    this.currentAggregationJob = undefined
   }
 
   private _handleJobUpdate(data: any) {
-    console.log('Received job update:', data)
-    
-    // Handle perspective updates
-    if (data['update']?.['perspectives'] != undefined) {
-      if (this.diagramPerspectives.length != 0) {
-        // If we already have perspectives, use timeout to avoid rapid updates
-        if (this.updateTimeout != undefined) {
-          clearTimeout(this.updateTimeout)
-          this.updateTimeout = undefined
-        }
-        var context = this
-        this.updateTimeout = setTimeout(function () {
-          context.diagramPerspectives = data['update']['perspectives'] as ProcessPerspective[]
-          context.updateTimeout = undefined
-          console.log('Updated perspectives (delayed):', context.diagramPerspectives.length)
-        }, 1000);
-      } else {
-        this.diagramPerspectives = data['update']['perspectives'] as ProcessPerspective[]
-        console.log('Updated perspectives (immediate):', this.diagramPerspectives.length)
-      }
+    const jobId = data['update']?.['job_id'] || data['job_id']
+    let shouldProcess = false
+
+    if (this.viewMode === 'instance') {
+      shouldProcess = this.currentBpmnJob?.job_id === jobId
+    } else if (this.viewMode === 'aggregation') {
+      shouldProcess = this.currentAggregationJob?.job_id === jobId
     }
-    
-    // Handle overlay updates
+
+    if (!shouldProcess)
+      return
+
+    let perspectiveUpdate = null
+    let overlayUpdate = null
+    let summaryUpdate = null
+
+    if (data['update']?.['perspectives'] != undefined) {
+      perspectiveUpdate = data['update']['perspectives']
+    }
+
     if (data['update']?.['overlays'] != undefined) {
-      this.diagramOverlays = data['update']['overlays'] as BpmnBlockOverlayReport[]
-      console.log('Updated overlays:', this.diagramOverlays.length)
-      
-      // Apply overlays immediately for overlays
+      overlayUpdate = data['update']['overlays']
+    }
+
+    if (this.viewMode === 'aggregation' && data['update']?.['summary'] != undefined) {
+      summaryUpdate = data['update']['summary']
+    }
+
+    // Apply all updates synchronously in the correct order
+    if (perspectiveUpdate) {
+      this.diagramPerspectives = perspectiveUpdate
+    }
+
+    if (summaryUpdate) {
+      this.aggregationSummary = summaryUpdate
+    }
+
+    if (overlayUpdate) {
+      this.diagramOverlays = overlayUpdate
+    }
+
+    // Apply overlays to graphics after a short delay to ensure BPMN is ready
+    if (overlayUpdate && overlayUpdate.length > 0) {
       setTimeout(() => {
         this.applyOverlaysToGraphics()
-      }, 100)
-    }
-    
-    // Aggregation-specific data
-    if (this.viewMode === 'aggregation' && data['update']?.['summary'] != undefined) {
-      this.aggregationSummary = data['update']['summary']
-      console.log('Updated aggregation summary:', this.aggregationSummary)
+      }, 300)
     }
   }
 }

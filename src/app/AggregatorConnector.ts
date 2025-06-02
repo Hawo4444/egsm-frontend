@@ -36,9 +36,13 @@ export class AggregatorConnector {
      */
     disconnect() {
         console.log('Disconnecting from Aggregator')
-        if (this.subscription) {
-            this.subscription.unsubscribe()
-            this.subscription = null
+        if (this.observable) {
+            this.observable.unsubscribe()
+            this.observable = null
+        }
+        if (this.socket) {
+            this.socket.complete()
+            this.socket = undefined
         }
         this.connected = false
     }
@@ -61,6 +65,31 @@ export class AggregatorConnector {
             payload: { job_id: jobid }
         }
         this.socket.next(JSON.stringify(newMessage))
+        console.log('Subscribed to job:', jobid)
+    }
+
+    unsubscribeJob(jobId: string) {
+        if (this.socket && this.connected) {
+            const message = {
+                type: 'job_unsubscribe',
+                payload: {
+                    job_id: jobId
+                }
+            }
+            this.socket.next(JSON.stringify(message))
+            console.log('Unsubscribed from job:', jobId)
+        }
+    }
+
+    unsubscribeAll() {
+        if (this.socket && this.connected) {
+            const message = {
+                type: 'unsubscribe_all',
+                payload: {}
+            }
+            this.socket.next(JSON.stringify(message))
+            console.log('Unsubscribed from all jobs')
+        }
     }
 
     getEventEmitter(){
