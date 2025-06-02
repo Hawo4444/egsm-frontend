@@ -46,6 +46,7 @@ import { AggregatedBpmnComponent } from './bpmn/aggregated-bpmn.component';
 import { MatGridListModule } from '@angular/material/grid-list';
 import { MatChipsModule } from '@angular/material/chips';
 import { ProcessTypeDetailsComponent } from './process-type-details/process-type-details.component';
+import { StageLegendComponent } from './bpmn/stage-legend.component';
 
 @NgModule({
   declarations: [
@@ -70,7 +71,8 @@ import { ProcessTypeDetailsComponent } from './process-type-details/process-type
     NewProcessGroupDialogComponent,
     BpmnComponent,
     AggregatedBpmnComponent,
-    ProcessTypeDetailsComponent
+    ProcessTypeDetailsComponent,
+    StageLegendComponent
   ],
   imports: [
     BrowserModule,

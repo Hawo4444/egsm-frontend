@@ -32,6 +32,7 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
     @Input() public model_xml: string;
     @Input() public aggregationSummary: any;
     @Output() DiagramEventEmitter: Subject<any> = new Subject();
+    @Output() legendDataChanged: Subject<any[]> = new Subject();
 
     blockProperties = new Map() // Block name -> {BpmnBlockOverlayReport}
     visibleOverlays = new Map() // Block name -> overlay ID
@@ -58,16 +59,16 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
 
         eventBus.on('element.hover', function (e) {
             var elementId = e.element.id
-            
+
             // Check if this element has block properties (meaning it's a tracked BPMN element)
-            if (context.blockProperties.has(elementId) || 
-                e.element.type?.includes('Task') || 
-                e.element.type?.includes('Event') || 
+            if (context.blockProperties.has(elementId) ||
+                e.element.type?.includes('Task') ||
+                e.element.type?.includes('Event') ||
                 e.element.type?.includes('Gateway')) {
-                
+
                 var stageData = context.getStageAggregationData(elementId);
                 var overlay = bpmnJsRef.get('overlays');
-                
+
                 if (context.visibleOverlays.has('aggregation-overlay')) {
                     overlay.remove(context.visibleOverlays.get('aggregation-overlay'))
                     context.visibleOverlays.delete('aggregation-overlay')
@@ -179,13 +180,18 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
                 });
             }
         });
+
+        setTimeout(() => {
+            const legendData = this.generateLegendData();
+            this.legendDataChanged.next(legendData);
+        }, 100);
     }
 
     setBlockColor(taskId: string, color: Color) {
         var modeling = this.bpmnJS.get('modeling');
         var elementRegistry = this.bpmnJS.get('elementRegistry');
         var element = elementRegistry.get(taskId)
-        
+
         if (color == undefined) {
             modeling.setColor([element], { fill: '#ffffff' });
         } else {
@@ -744,6 +750,56 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
 
         return resultPaths;
     }
+
+    generateLegendData(): any[] {
+        const legendItems = [];
+        const colorMap = new Map<string, { color: any, count: number, maxDeviationRate: number }>();
+
+        this.blockProperties.forEach((props, stageId) => {
+            if (props.color) {
+                const colorKey = props.color.fill || '#ffffff';
+
+                if (!colorMap.has(colorKey)) {
+                    colorMap.set(colorKey, {
+                        color: props.color,
+                        count: 0,
+                        maxDeviationRate: 0
+                    });
+                }
+
+                const colorData = colorMap.get(colorKey)!;
+                colorData.count++;
+
+                const stageData = this.getStageAggregationData(stageId);
+                if (stageData && stageData.deviationRate) {
+                    colorData.maxDeviationRate = Math.max(colorData.maxDeviationRate, stageData.deviationRate);
+                }
+            }
+        });
+
+        const sortedColors = Array.from(colorMap.entries()).sort((a, b) => b[1].maxDeviationRate - a[1].maxDeviationRate);
+
+        sortedColors.forEach(([_, data]) => {
+            const label = this.getDeviationRateLabel(data.maxDeviationRate);
+            //TODO: description
+            legendItems.push({
+                color: data.color,
+                label: label
+            });
+        });
+
+        return legendItems;
+    }
+
+    private getDeviationRateLabel(deviationRate: number): string {
+        if (deviationRate >= 75) return 'Critical (≥75% deviations)';
+        if (deviationRate >= 50) return 'High (50-74% deviations)';
+        if (deviationRate >= 25) return 'Medium (25-49% deviations)';
+        if (deviationRate > 0) return 'Low (1-24% deviations)';
+        return 'No deviations (0%)';
+    }
+
+
 
     ngOnDestroy(): void {
         if (this.bpmnJS) {

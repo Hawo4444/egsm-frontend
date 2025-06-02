@@ -56,6 +56,8 @@ export class EnginesComponent {
   @ViewChildren('bpmn_diagrams') bpmnDiagrams: BpmnComponent[]
   @ViewChildren('aggregated_bpmn_diagrams') aggregatedBpmnDiagrams: AggregatedBpmnComponent[]
 
+  currentLegendData: any[] = [];
+
   constructor(private supervisorService: SupervisorService, private snackBar: MatSnackBar, private loadingService: LoadingService, public deleteProcessDialog: MatDialog) {
     this.instanceHttpSubscription = this.supervisorService.ProcessSearchEventEmitter.subscribe((update: any) => {
       this.applyUpdate(update)
@@ -300,6 +302,7 @@ export class EnginesComponent {
     this.supervisorService.requestUpdate(MODULE_STORAGE_KEY, payload)
   }
 
+  // Update the selectTab method to ensure selectedTabIndex is tracked
   selectTab(index: number) {
     this.selectedTabIndex = index;
 
@@ -317,6 +320,11 @@ export class EnginesComponent {
         header.classList.remove('active');
       }
     });
+  }
+
+  // Add this method to handle legend data changes
+  onLegendDataChanged(legendData: any[]) {
+    this.currentLegendData = legendData;
   }
 
   private _connectToJob(job: any) {

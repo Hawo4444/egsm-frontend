@@ -100,18 +100,23 @@
         <div class="simple-tabs">
             <div class="tab-headers">
                 <button *ngFor="let perspective of diagramPerspectives; let i = index" class="tab-header"
-                    [class.active]="i === 0" (click)="selectTab(i)">
+                    [class.active]="selectedTabIndex === i" (click)="selectTab(i)">
                     {{perspective.name}}
                 </button>
             </div>
         </div>
 
-        <div *ngFor="let perspective of diagramPerspectives; let i = index" [style.display]="i === 0 ? 'block' : 'none'"
-            class="tab-panel">
+        <app-stage-legend [legendItems]="currentLegendData" *ngIf="currentLegendData.length > 0">
+        </app-stage-legend>
+
+        <div *ngFor="let perspective of diagramPerspectives; let i = index"
+            [style.display]="selectedTabIndex === i ? 'block' : 'none'" class="tab-panel">
             <mat-card class="bpmn-container">
                 <div class="bpmn-container">
                     <app-aggregated-bpmn [model_id]="perspective.name" [model_xml]="perspective.bpmn_xml"
-                        (DiagramEventEmitter)="onDiagramEvent($event)" #aggregated_bpmn_diagrams></app-aggregated-bpmn>
+                        [aggregationSummary]="aggregationSummary" (DiagramEventEmitter)="onDiagramEvent($event)"
+                        (legendDataChanged)="onLegendDataChanged($event)" #aggregated_bpmn_diagrams>
+                    </app-aggregated-bpmn>
                 </div>
             </mat-card>
         </div>
