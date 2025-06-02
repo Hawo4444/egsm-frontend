@@ -60,13 +60,41 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
         eventBus.on('element.hover', function (e) {
             var elementId = e.element.id
 
+            // Check if this element is a gateway block (square overlay)
+            const isGatewayBlock = Array.from(context.gatewayBlocks.values()).some(block => block.id === elementId);
+
+            // If hovering over a gateway block, find the original gateway ID
+            let targetElementId = elementId;
+            if (isGatewayBlock) {
+                for (const [gatewayId, block] of context.gatewayBlocks.entries()) {
+                    if (block.id === elementId) {
+                        targetElementId = gatewayId;
+                        break;
+                    }
+                }
+            }
+
+            // Skip ALL gateways that have gateway blocks (both first and second gateway)
+            const isGatewayWithBlock = e.element.type?.includes('Gateway') && context.gatewayBlocks.has(elementId);
+            const isSecondGatewayInBlock = e.element.type?.includes('Gateway') && 
+                Array.from(context.gatewayBlocks.keys()).some(gatewayId => {
+                    const gatewayElement = context.bpmnJS.get('elementRegistry').get(gatewayId);
+                    const endGateway = context.findEndGateway(gatewayElement);
+                    return endGateway && endGateway.id === elementId;
+                });
+
+            if (isGatewayWithBlock || isSecondGatewayInBlock) {
+                return;
+            }
+
             // Check if this element has block properties (meaning it's a tracked BPMN element)
-            if (context.blockProperties.has(elementId) ||
+            if (context.blockProperties.has(targetElementId) ||
                 e.element.type?.includes('Task') ||
                 e.element.type?.includes('Event') ||
-                e.element.type?.includes('Gateway')) {
+                (e.element.type?.includes('Gateway') && !isGatewayWithBlock && !isSecondGatewayInBlock) ||
+                isGatewayBlock) {
 
-                var stageData = context.getStageAggregationData(elementId);
+                var stageData = context.getStageAggregationData(targetElementId);
                 var overlay = bpmnJsRef.get('overlays');
 
                 if (context.visibleOverlays.has('aggregation-overlay')) {
@@ -79,7 +107,7 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
                         top: -25,
                         right: 0
                     },
-                    html: `<div style="z-index: 1000; position: relative;">${context.createAggregationTooltip(elementId, stageData)}</div>`
+                    html: `<div style="z-index: 1000; position: relative;">${context.createAggregationTooltip(targetElementId, stageData)}</div>`
                 }));
             }
         })
