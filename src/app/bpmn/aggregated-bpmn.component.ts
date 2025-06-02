@@ -484,7 +484,23 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
     }
 
     getStageAggregationData(stageId: string): any {
-        return this.aggregationSummary?.stageDetails?.[stageId];
+        if (!this.aggregationSummary?.perspectives || !Array.isArray(this.aggregationSummary.perspectives)) {
+            console.warn('No perspectives data available in aggregation summary');
+            return null;
+        }
+
+        const perspective = this.aggregationSummary.perspectives[0];
+        
+        if (!perspective?.stageDetails) {
+            console.warn('No stage details available in perspective');
+            return null;
+        }
+
+        if (perspective.stageDetails[stageId]) {
+            return perspective.stageDetails[stageId];
+        }
+  
+        return null;
     }
 
     removeOverlay(id: string) {
