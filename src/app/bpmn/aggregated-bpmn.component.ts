@@ -255,13 +255,13 @@ export class AggregatedBpmnComponent extends BaseBpmnComponent implements AfterC
 
                     if (rect) {
                         rect.removeAttribute('style');
-                        
+
                         let backgroundColor = '#f0f0f0';
                         if (this.appliedColors.has(elementId)) {
                             const appliedColor = this.appliedColors.get(elementId)!.color;
                             backgroundColor = appliedColor.fill || '#f0f0f0';
                         }
-                        
+
                         rect.setAttribute('stroke', 'red');
                         rect.setAttribute('stroke-width', '2');
                         rect.setAttribute('stroke-dasharray', '4,2');
@@ -327,8 +327,31 @@ export class AggregatedBpmnComponent extends BaseBpmnComponent implements AfterC
         }
 
         return Object.entries(counts)
-            .map(([type, count]) => `<strong>${type}:</strong> ${count}`)
+            .map(([type, count]) => `<strong>${this.formatDeviationType(type)}:</strong> ${count}`)
             .join('<br>');
+    }
+
+    private formatDeviationType(deviationType: string): string {
+        switch (deviationType) {
+            case 'SKIPPED':
+                return 'Skipped';
+            case 'OVERLAP':
+                return 'Overlaps';
+            case 'INCORRECT_EXECUTION_SEQUENCE':
+                return 'Incorrect Execution';
+            case 'INCOMPLETE':
+                return 'Incomplete';
+            case 'MULTI_EXECUTION':
+                return 'Multi Execution';
+            case 'INCORRECT_BRANCH':
+                return 'Incorrect Branch';
+            default:
+                return deviationType
+                    .toLowerCase()
+                    .split('_')
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(' ');
+        }
     }
 
     getStageAggregationData(stageId: string): any {
