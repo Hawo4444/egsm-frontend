@@ -37,6 +37,9 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
     blockProperties = new Map() // Block name -> {BpmnBlockOverlayReport}
     visibleOverlays = new Map() // Block name -> overlay ID
 
+    // Add a property to track all applied colors
+    private appliedColors = new Map<string, { color: Color, deviationRate: number }>();
+
     constructor() {
         this.bpmnJS = new BpmnModeler();
     }
@@ -76,7 +79,7 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
 
             // Skip ALL gateways that have gateway blocks (both first and second gateway)
             const isGatewayWithBlock = e.element.type?.includes('Gateway') && context.gatewayBlocks.has(elementId);
-            const isSecondGatewayInBlock = e.element.type?.includes('Gateway') && 
+            const isSecondGatewayInBlock = e.element.type?.includes('Gateway') &&
                 Array.from(context.gatewayBlocks.keys()).some(gatewayId => {
                     const gatewayElement = context.bpmnJS.get('elementRegistry').get(gatewayId);
                     const endGateway = context.findEndGateway(gatewayElement);
@@ -128,6 +131,7 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
             this.visibleOverlays.clear()
             this.gatewayBlocks.clear()
             this.iconPositions.clear()
+            this.appliedColors.clear()
             this.bpmnJS.importXML(value)
             this.bpmnJS.on('import.done', ({ error }) => {
                 if (!error) {
@@ -155,6 +159,14 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
      */
     applyAggregatedOverlayReport(overlayreport: BpmnBlockOverlayReport[]) {
         overlayreport.forEach(element => {
+            if (element.color) {
+                const stageData = this.getStageAggregationData(element.block_id);
+                this.appliedColors.set(element.block_id, {
+                    color: element.color,
+                    deviationRate: stageData?.deviationRate || 0
+                });
+            }
+
             if (this.blockProperties.has(element.block_id)) {
                 const currentProps = this.blockProperties.get(element.block_id);
                 const elementRegistry = this.bpmnJS.get('elementRegistry');
@@ -208,11 +220,6 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
                 });
             }
         });
-
-        setTimeout(() => {
-            const legendData = this.generateLegendData();
-            this.legendDataChanged.next(legendData);
-        }, 100);
     }
 
     setBlockColor(taskId: string, color: Color) {
@@ -295,13 +302,19 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
 
                     if (rect) {
                         rect.removeAttribute('style');
-                        // Set background color based on severity/color for the square
-                        const backgroundColor = this.getBackgroundColorFromFlag(flag);
+                        
+                        // Use the same color as the gateway element from appliedColors
+                        let backgroundColor = '#f0f0f0'; // default
+                        if (this.appliedColors.has(elementId)) {
+                            const appliedColor = this.appliedColors.get(elementId)!.color;
+                            backgroundColor = appliedColor.fill || '#f0f0f0';
+                        }
+                        
                         rect.setAttribute('stroke', 'red');
                         rect.setAttribute('stroke-width', '2');
                         rect.setAttribute('stroke-dasharray', '4,2');
                         rect.setAttribute('fill', backgroundColor);
-                        rect.setAttribute('fill-opacity', '0.3');
+                        //rect.setAttribute('fill-opacity', '1');
                     }
 
                     this.visibleOverlays.set(gatewayBlockKey, addedShape);
@@ -314,17 +327,6 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
         }
 
         this.updateRegularElementIcon(elementId, flag, html);
-    }
-
-    getBackgroundColorFromFlag(flag: any): string {
-        const severityColors = {
-            'CRITICAL': '#ffcccc',
-            'HIGH': '#ffe6cc',
-            'MEDIUM': '#ffffcc',
-            'LOW': '#e6ffcc'
-        };
-
-        return severityColors[flag.details?.severity] || '#f0f0f0';
     }
 
     updateGatewayIcon(elementId: string, flag: { deviation: string, details: any }, html: string, addedShape: any) {
@@ -518,7 +520,7 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
         }
 
         const perspective = this.aggregationSummary.perspectives[0];
-        
+
         if (!perspective?.stageDetails) {
             console.warn('No stage details available in perspective');
             return null;
@@ -527,7 +529,7 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
         if (perspective.stageDetails[stageId]) {
             return perspective.stageDetails[stageId];
         }
-  
+
         return null;
     }
 
@@ -799,33 +801,27 @@ export class AggregatedBpmnComponent implements AfterContentInit, OnDestroy {
         const legendItems = [];
         const colorMap = new Map<string, { color: any, count: number, maxDeviationRate: number }>();
 
-        this.blockProperties.forEach((props, stageId) => {
-            if (props.color) {
-                const colorKey = props.color.fill || '#ffffff';
+        // Use the captured applied colors directly
+        this.appliedColors.forEach((colorData, stageId) => {
+            const colorKey = colorData.color.fill || '#ffffff';
 
-                if (!colorMap.has(colorKey)) {
-                    colorMap.set(colorKey, {
-                        color: props.color,
-                        count: 0,
-                        maxDeviationRate: 0
-                    });
-                }
-
-                const colorData = colorMap.get(colorKey)!;
-                colorData.count++;
-
-                const stageData = this.getStageAggregationData(stageId);
-                if (stageData && stageData.deviationRate) {
-                    colorData.maxDeviationRate = Math.max(colorData.maxDeviationRate, stageData.deviationRate);
-                }
+            if (!colorMap.has(colorKey)) {
+                colorMap.set(colorKey, {
+                    color: colorData.color,
+                    count: 0,
+                    maxDeviationRate: 0
+                });
             }
+
+            const mapData = colorMap.get(colorKey)!;
+            mapData.count++;
+            mapData.maxDeviationRate = Math.max(mapData.maxDeviationRate, colorData.deviationRate);
         });
 
         const sortedColors = Array.from(colorMap.entries()).sort((a, b) => b[1].maxDeviationRate - a[1].maxDeviationRate);
 
         sortedColors.forEach(([_, data]) => {
             const label = this.getDeviationRateLabel(data.maxDeviationRate);
-            //TODO: description
             legendItems.push({
                 color: data.color,
                 label: label

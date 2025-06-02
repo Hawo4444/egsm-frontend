@@ -125,7 +125,7 @@ export class EnginesComponent {
 
   switchToAggregationView() {
     this.viewMode = 'aggregation'
-    
+
     this.loadingService.setLoadningState(true)
     this._disconnectCurrentJob()
 
@@ -220,6 +220,8 @@ export class EnginesComponent {
   }
 
   applyOverlaysToGraphics() {
+    let aggregatedDiagramsUpdated = new Set<AggregatedBpmnComponent>();
+
     this.diagramOverlays.forEach(overlay => {
       if (this.viewMode === 'instance') {
         var diagram = this.bpmnDiagrams.find(element => element.model_id == overlay.perspective)
@@ -230,9 +232,18 @@ export class EnginesComponent {
         var aggregatedDiagram = this.aggregatedBpmnDiagrams.find(element => element.model_id == overlay.perspective)
         if (aggregatedDiagram) {
           aggregatedDiagram.applyAggregatedOverlayReport([overlay])
+          aggregatedDiagramsUpdated.add(aggregatedDiagram);
         }
       }
     });
+
+    if (this.viewMode === 'aggregation' && aggregatedDiagramsUpdated.size > 0) {
+      const firstDiagram = Array.from(aggregatedDiagramsUpdated)[0];
+      setTimeout(() => {
+        const legendData = firstDiagram.generateLegendData();
+        this.currentLegendData = legendData;
+      }, 100);
+    }
   }
 
   onSearch(instance_id: any) {
