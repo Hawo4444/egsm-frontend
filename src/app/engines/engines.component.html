@@ -123,3 +123,96 @@
     </div>
     <br>
 </div>
+
+<!-- Replace the complex tab section with this simpler version -->
+<div *ngIf="viewMode === 'aggregation' && aggregationSummary?.processAggregations" class="mat-elevation-z8">
+    <mat-card class="process-aggregations-card">
+        <mat-card-header>
+            <mat-card-title>Process-Level Analysis</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+            <div class="simple-tabs">
+                <div class="tab-headers">
+                    <button *ngFor="let tab of aggregationTabs; let i = index" class="tab-header"
+                        [class.active]="selectedAggregationTab === i" (click)="selectAggregationTab(i)">
+                        {{tab}}
+                    </button>
+                </div>
+
+                <!-- Stage Correlations Tab -->
+                <div *ngIf="selectedAggregationTab === 0" class="tab-content">
+                    <div *ngFor="let perspective of getPerspectiveNames()" class="perspective-section">
+                        <h4>{{perspective}} Perspective</h4>
+                        <div class="correlations-list">
+                            <div *ngFor="let correlation of getTopStageCorrelations(perspective, 5)"
+                                class="correlation-item">
+                                <span class="stage-pair">{{correlation.stage1}} ↔ {{correlation.stage2}}</span>
+                                <span class="correlation-count">{{correlation.count}} instances</span>
+                            </div>
+                            <div *ngIf="getTopStageCorrelations(perspective, 5).length === 0" class="no-data">
+                                No stage correlations found
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deviation Types Tab -->
+                <div *ngIf="selectedAggregationTab === 1" class="tab-content">
+                    <div *ngFor="let perspective of getPerspectiveNames()" class="perspective-section">
+                        <h4>{{perspective}} Perspective</h4>
+                        <div class="deviation-types-list">
+                            <div *ngFor="let type of getDeviationTypesList(perspective)" class="deviation-type-item">
+                                <div class="type-header">
+                                    <span class="type-name">{{formatDeviationType(type.name)}}</span>
+                                    <span class="type-count">{{type.count}} occurrences</span>
+                                </div>
+                                <div class="type-details">
+                                    <span class="percentage">{{type.percentage.toFixed(1)}}% of instances</span>
+                                    <span class="instance-count">{{type.instanceCount}} instances affected</span>
+                                </div>
+                            </div>
+                            <div *ngIf="getDeviationTypesList(perspective).length === 0" class="no-data">
+                                No deviation types found
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Instance Analysis Tab -->
+                <div *ngIf="selectedAggregationTab === 2" class="tab-content">
+                    <div *ngFor="let perspective of getPerspectiveNames()" class="perspective-section">
+                        <h4>{{perspective}} Perspective</h4>
+                        <div class="instance-stats">
+                            <div class="stat-item">
+                                <span class="stat-label">Total Instances:</span>
+                                <span class="stat-value">{{getTotalInstanceCount(perspective)}}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">With Deviations:</span>
+                                <span class="stat-value">{{getInstancesWithDeviationsCount(perspective)}}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Average Deviations:</span>
+                                <span class="stat-value">{{getAverageDeviationsPerInstance(perspective)}}</span>
+                            </div>
+                        </div>
+                        <div class="all-instances">
+                            <h5>All Instances (Ordered by Deviation Count):</h5>
+                            <div class="instances-container">
+                                <div *ngFor="let instance of getAllInstancesOrderedByDeviations(perspective)"
+                                    class="instance-item" [ngClass]="getInstanceSeverityClass(instance.count)">
+                                    <span class="instance-id">{{instance.id}}</span>
+                                    <span class="instance-deviations">{{instance.count}} deviations</span>
+                                </div>
+                                <div *ngIf="getAllInstancesOrderedByDeviations(perspective).length === 0"
+                                    class="no-data">
+                                    No instances found
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </mat-card-content>
+    </mat-card>
+</div>

@@ -438,4 +438,101 @@ export class EnginesComponent {
       }, 300)
     }
   }
+
+  selectedAggregationTab = 0;
+  aggregationTabs = ['Stage Correlations', 'Deviation Types', 'Instance Analysis'];
+
+  selectAggregationTab(index: number) {
+    this.selectedAggregationTab = index;
+  }
+
+  getPerspectiveNames(): string[] {
+    if (!this.aggregationSummary?.processAggregations) return [];
+    return Object.keys(this.aggregationSummary.processAggregations);
+  }
+
+  getTopStageCorrelations(perspective: string, limit: number = 5): any[] {
+    const processAggs = this.aggregationSummary?.processAggregations;
+    if (!processAggs || !processAggs[perspective]) return [];
+
+    const correlations = processAggs[perspective].stageCorrelations || [];
+    return correlations.slice(0, limit);
+  }
+
+  getDeviationTypesList(perspective: string): any[] {
+    const processAggs = this.aggregationSummary?.processAggregations;
+    if (!processAggs || !processAggs[perspective]) return [];
+
+    const typeCounts = processAggs[perspective].deviationTypeCounts || {};
+    const typePercentages = processAggs[perspective].deviationTypePercentages || {};
+    const typeInstances = processAggs[perspective].deviationTypeInstances || {};
+
+    const result: any[] = [];
+
+    Object.keys(typeCounts).forEach(typeName => {
+      result.push({
+        name: typeName,
+        count: typeCounts[typeName] || 0,
+        percentage: typePercentages[typeName] || 0,
+        instanceCount: (typeInstances[typeName] || []).length
+      });
+    });
+
+    return result.sort((a, b) => b.count - a.count);
+  }
+
+  formatDeviationType(type: string): string {
+    return type.toLowerCase()
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
+
+  getTotalInstanceCount(perspective: string): number {
+    const processAggs = this.aggregationSummary?.processAggregations;
+    if (!processAggs || !processAggs[perspective]) return 0;
+
+    const instanceCounts = processAggs[perspective].instanceDeviationCounts || {};
+    return Object.keys(instanceCounts).length;
+  }
+
+  getInstancesWithDeviationsCount(perspective: string): number {
+    const processAggs = this.aggregationSummary?.processAggregations;
+    if (!processAggs || !processAggs[perspective]) return 0;
+
+    const instanceCounts = processAggs[perspective].instanceDeviationCounts || {};
+    return Object.values(instanceCounts).filter((count: any) => count > 0).length;
+  }
+
+  getAverageDeviationsPerInstance(perspective: string): string {
+    const processAggs = this.aggregationSummary?.processAggregations;
+    if (!processAggs || !processAggs[perspective]) return '0.0';
+
+    const instanceCounts = processAggs[perspective].instanceDeviationCounts || {};
+    const counts = Object.values(instanceCounts) as number[];
+
+    if (counts.length === 0) return '0.0';
+
+    const total = counts.reduce((sum, count) => sum + count, 0);
+    const average = total / counts.length;
+
+    return average.toFixed(1);
+  }
+
+  getAllInstancesOrderedByDeviations(perspective: string): any[] {
+    const processAggs = this.aggregationSummary?.processAggregations;
+    if (!processAggs || !processAggs[perspective]) return [];
+
+    const instanceCounts = processAggs[perspective].instanceDeviationCounts || {};
+
+    const instances = Object.entries(instanceCounts)
+      .map(([id, count]) => ({ id, count: count as number }))
+      .sort((a, b) => b.count - a.count);
+
+    return instances;
+  }
+
+  getInstanceSeverityClass(deviationCount: number): string {
+    return deviationCount === 0 ? 'has-no-deviations' : 'has-deviations';
+  }
 }
