@@ -20,7 +20,6 @@ import { BaseBpmnComponent } from './base-bpmn.component';
   styleUrls: ['./bpmn.component.scss'],
 })
 export class BpmnComponent extends BaseBpmnComponent implements AfterContentInit {
-  // Component-specific properties
   cumulativeOverlaps = new Map();
   cumulativeIterations = new Map();
   blockStatistics = new Map();

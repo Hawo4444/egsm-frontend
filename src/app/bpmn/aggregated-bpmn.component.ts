@@ -16,14 +16,16 @@ import { BaseBpmnComponent } from './base-bpmn.component';
 
 @Component({
     selector: 'app-aggregated-bpmn',
-    templateUrl: './bpmn.component.html',
-    styleUrls: ['./bpmn.component.scss'],
+    templateUrl: './aggregated-bpmn.component.html',
+    styleUrls: ['./aggregated-bpmn.component.scss'],
 })
 export class AggregatedBpmnComponent extends BaseBpmnComponent implements AfterContentInit {
-    // Component-specific properties
     private appliedColors = new Map<string, { color: Color, deviationRate: number }>();
 
     @ViewChild('ref', { static: true }) private el: ElementRef;
+    @ViewChild('aggregationTooltipTemplate', { static: true }) private aggregationTooltipTemplate: ElementRef;
+    @ViewChild('noDataTooltipTemplate', { static: true }) private noDataTooltipTemplate: ElementRef;
+    
     @Input() public model_id: string;
     @Input() public model_xml: string;
     @Input() public aggregationSummary: any;
@@ -91,12 +93,14 @@ export class AggregatedBpmnComponent extends BaseBpmnComponent implements AfterC
                     context.visibleOverlays.delete('aggregation-overlay');
                 }
 
+                const tooltipHtml = context.createAggregationTooltip(targetElementId, stageData);
+                
                 context.visibleOverlays.set('aggregation-overlay', overlay.add(elementId, {
                     position: {
                         top: -25,
                         right: 0
                     },
-                    html: `<div style="z-index: 1000; position: relative;">${context.createAggregationTooltip(targetElementId, stageData)}</div>`
+                    html: `<div style="z-index: 1000; position: relative;">${tooltipHtml}</div>`
                 }));
             }
         });
@@ -110,7 +114,6 @@ export class AggregatedBpmnComponent extends BaseBpmnComponent implements AfterC
         });
     }
 
-    // Override base method for aggregated coloring
     override setBlockColor(taskId: string, color: Color) {
         const modeling = this.bpmnJS.get('modeling');
         const elementRegistry = this.bpmnJS.get('elementRegistry');
@@ -123,7 +126,6 @@ export class AggregatedBpmnComponent extends BaseBpmnComponent implements AfterC
         }
     }
 
-    // Override base method for aggregated icon generation
     protected override generateIconHtml(flag: { deviation: string, details: any }): string {
         switch (flag.deviation) {
             case 'INCOMPLETE':
@@ -284,51 +286,54 @@ export class AggregatedBpmnComponent extends BaseBpmnComponent implements AfterC
         const elementName = this.elementNamesMap.get(elementId) || elementId;
 
         if (!stageData) {
-            return `<div style="
-        width: 250px; 
-        background-color: #f8f9fa;
-        border: 1px solid #dee2e6;
-        border-radius: 5px;
-        padding: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      ">
-        <h3 style="margin: 0 0 10px 0; color: #495057;">${elementName}</h3>
-        <div style="color: #6c757d; font-style: italic;">
-          No aggregation data available
-        </div>
-      </div>`;
+            const template = this.noDataTooltipTemplate.nativeElement.cloneNode(true) as HTMLElement;
+            const titleElement = template.querySelector('.tooltip-title');
+            if (titleElement) {
+                titleElement.textContent = elementName;
+            }
+            return template.outerHTML;
         }
 
-        return `<div style="
-      width: 350px; 
-      background-color: #f8f9fa;
-      border: 1px solid #dee2e6;
-      border-radius: 5px;
-      padding: 10px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    ">
-      <h3 style="margin: 0 0 10px 0; color: #495057;">${elementName} - Aggregated</h3>
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-        <div>
-          <strong>Total Instances:</strong> ${stageData.totalInstances || 0}<br>
-          <strong>With Deviations:</strong> ${stageData.instancesWithDeviations || 0}<br>
-          <strong>Deviation Rate:</strong> ${(stageData.deviationRate || 0).toFixed(1)}%
-        </div>
-        <div>
-          ${this.formatDeviationCounts(stageData.deviationCounts)}
-        </div>
-      </div>
-    </div>`;
+        const template = this.aggregationTooltipTemplate.nativeElement.cloneNode(true) as HTMLElement;
+        
+        const titleElement = template.querySelector('.tooltip-title');
+        if (titleElement) {
+            titleElement.textContent = `${elementName} - Aggregated`;
+        }
+
+        const totalInstancesElement = template.querySelector('.total-instances');
+        if (totalInstancesElement) {
+            totalInstancesElement.textContent = (stageData.totalInstances || 0).toString();
+        }
+
+        const withDeviationsElement = template.querySelector('.with-deviations');
+        if (withDeviationsElement) {
+            withDeviationsElement.textContent = (stageData.instancesWithDeviations || 0).toString();
+        }
+
+        const deviationRateElement = template.querySelector('.deviation-rate');
+        if (deviationRateElement) {
+            deviationRateElement.textContent = `${(stageData.deviationRate || 0).toFixed(1)}%`;
+        }
+
+        const deviationCountsElement = template.querySelector('.deviation-counts');
+        if (deviationCountsElement) {
+            deviationCountsElement.innerHTML = this.formatDeviationCountsHtml(stageData.deviationCounts);
+        }
+
+        return template.outerHTML;
     }
 
-    formatDeviationCounts(counts: any): string {
+    formatDeviationCountsHtml(counts: any): string {
         if (!counts || Object.keys(counts).length === 0) {
-            return '<em>No deviations</em>';
+            return '<div class="no-deviations">No deviations</div>';
         }
 
         return Object.entries(counts)
-            .map(([type, count]) => `<strong>${this.formatDeviationType(type)}:</strong> ${count}`)
-            .join('<br>');
+            .map(([type, count]) => 
+                `<div class="deviation-item"><strong>${this.formatDeviationType(type)}:</strong> ${count}</div>`
+            )
+            .join('');
     }
 
     private formatDeviationType(deviationType: string): string {

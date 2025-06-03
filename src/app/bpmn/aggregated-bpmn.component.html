@@ -1,0 +1,33 @@
+<h1>{{model_id}}</h1>
+<div #ref class="diagram-container"></div>
+
+<div class="tooltip-templates" style="display: none;">
+    <div #aggregationTooltipTemplate class="aggregation-tooltip">
+        <h3 class="tooltip-title"></h3>
+        <div class="tooltip-content">
+            <div class="stats-grid">
+                <div class="stats-left">
+                    <div class="stat-item">
+                        <strong>Total Instances: </strong> <span class="total-instances">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <strong>With Deviations: </strong> <span class="with-deviations">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <strong>Deviation Rate: </strong> <span class="deviation-rate">0.0%</span>
+                    </div>
+                </div>
+                <div class="stats-right">
+                    <div class="deviation-counts"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div #noDataTooltipTemplate class="aggregation-tooltip no-data">
+        <h3 class="tooltip-title"></h3>
+        <div class="tooltip-content">
+            <div class="no-data-message">No aggregation data available</div>
+        </div>
+    </div>
+</div>
