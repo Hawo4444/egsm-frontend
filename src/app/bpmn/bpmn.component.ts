@@ -46,6 +46,7 @@ export class BpmnComponent extends BaseBpmnComponent implements AfterContentInit
     this.blockStatistics.clear();
     this.cumulativeOverlaps.clear();
     this.cumulativeIterations.clear();
+    this.flagCounts.clear();
   }
 
   private setupEventHandlers() {
@@ -102,6 +103,9 @@ export class BpmnComponent extends BaseBpmnComponent implements AfterContentInit
   }
 
   applyOverlayReport(overlayreport: BpmnBlockOverlayReport[]) {
+    this.cumulativeOverlaps.clear();
+    this.cumulativeIterations.clear();
+
     overlayreport.forEach(element => {
       if (this.blockProperties.has(element.block_id)) {
         if (this.blockProperties.get(element.block_id).color != element.color) {
@@ -155,23 +159,20 @@ export class BpmnComponent extends BaseBpmnComponent implements AfterContentInit
     }
   }
 
-  // Override base method to add iteration and overlap handling
+  private generateOverlapHtml(flag: { deviation: string, details: any }, iterationText: string): string {
+    const elementId = flag.details.elementId || '';
+    const currentOverlaps = flag.details?.over?.map(id => this.getElementNameById(id)) ?? [];
+
+    const overlapText = currentOverlaps.join('\n');
+    return `<img src="assets/arrows.png" title="Overlaps:\n${overlapText}${iterationText}" style="transform: rotate(90deg); width:25px; height:25px;">`;
+  }
+
   protected override generateIconHtml(flag: { deviation: string, details: any }): string {
     const hasIteration = flag.details.iterationIndex !== undefined && flag.details.iterationIndex !== -1;
     let iterationText = '';
 
     if (hasIteration) {
-      const iterationKey = `${flag.details.elementId || ''}_${flag.deviation}`;
-      const existingIterations = this.cumulativeIterations.get(iterationKey) || [];
-
-      if (!existingIterations.includes(flag.details.iterationIndex)) {
-        existingIterations.push(flag.details.iterationIndex);
-        existingIterations.sort((a, b) => a - b);
-        this.cumulativeIterations.set(iterationKey, existingIterations);
-      }
-
-      const iterationNumbers = existingIterations.map(iter => `Iteration ${iter + 1}`).join('\n');
-      iterationText = `\n${iterationNumbers}`;
+      iterationText = `\nIteration ${flag.details.iterationIndex + 1}`;
     }
 
     switch (flag.deviation) {
@@ -191,23 +192,6 @@ export class BpmnComponent extends BaseBpmnComponent implements AfterContentInit
       default:
         return '';
     }
-  }
-
-  private generateOverlapHtml(flag: { deviation: string, details: any }, iterationText: string): string {
-    const elementId = flag.details.elementId || '';
-    const newOverlaps = flag.details?.over?.map(id => this.getElementNameById(id)) ?? [];
-
-    const existingOverlaps = this.cumulativeOverlaps.get(elementId) || [];
-    const allOverlaps = [...existingOverlaps];
-    if (existingOverlaps.length > 0 && newOverlaps.length > 0) {
-      allOverlaps.push('————————');
-    }
-    allOverlaps.push(...newOverlaps);
-
-    this.cumulativeOverlaps.set(elementId, [...existingOverlaps, ...newOverlaps]);
-
-    const overlapText = allOverlaps.join('\n');
-    return `<img src="assets/arrows.png" title="Overlaps:\n${overlapText}${iterationText}" style="transform: rotate(90deg); width:25px; height:25px;">`;
   }
 
   addFlagToOverlay(elementId: string, flag: { deviation: string, details: any }) {

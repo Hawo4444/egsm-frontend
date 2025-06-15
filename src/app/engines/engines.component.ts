@@ -51,6 +51,7 @@ export class EnginesComponent {
 
   selectedTabIndex = 0;
   private updateTimeout: any = undefined
+  private overlayApplicationInProgress = false;
 
   @ViewChild('engines') engineList: EngineListComponent
   @ViewChildren('bpmn_diagrams') bpmnDiagrams: BpmnComponent[]
@@ -129,7 +130,6 @@ export class EnginesComponent {
     this.loadingService.setLoadningState(true)
     this._disconnectCurrentJob()
 
-    // Clear instance-specific data
     this.diagramPerspectives = []
     this.diagramOverlays = []
     this.currentProcessId = ''
@@ -191,7 +191,6 @@ export class EnginesComponent {
 
     this._disconnectCurrentJob()
 
-    // Clear aggregation-specific data
     this.diagramPerspectives = []
     this.diagramOverlays = []
     this.aggregationSummary = undefined
@@ -220,6 +219,12 @@ export class EnginesComponent {
   }
 
   applyOverlaysToGraphics() {
+    if (this.overlayApplicationInProgress) {
+      return;
+    }
+
+    this.overlayApplicationInProgress = true;
+
     let aggregatedDiagramsUpdated = new Set<AggregatedBpmnComponent>();
 
     this.diagramOverlays.forEach(overlay => {
@@ -242,21 +247,23 @@ export class EnginesComponent {
       setTimeout(() => {
         const legendData = firstDiagram.generateLegendData();
         this.currentLegendData = legendData;
+        this.overlayApplicationInProgress = false;
       }, 100);
+    } else {
+      this.overlayApplicationInProgress = false;
     }
   }
 
   onSearch(instance_id: any) {
     this.snackBar.dismiss()
     this.currentProcessId = instance_id
-    this.viewMode = 'instance' // Ensure instance mode
+    this.viewMode = 'instance'
 
     // Disconnect if we're switching between different instances or view modes
     if (this.currentBpmnJob || this.currentAggregationJob) {
       this._disconnectCurrentJob()
     }
 
-    // Clear diagram data for new search
     this.diagramPerspectives = []
     this.diagramOverlays = []
     this.isResult = false
@@ -289,7 +296,7 @@ export class EnginesComponent {
     if (event == 'INIT_DONE') {
       var context = this
       setTimeout(function () {
-        if (context.diagramOverlays.length > 0) {
+        if (context.diagramOverlays.length > 0 && !context.overlayApplicationInProgress) {
           context.applyOverlaysToGraphics();
         }
       }, 300);
@@ -313,7 +320,6 @@ export class EnginesComponent {
     this.supervisorService.requestUpdate(MODULE_STORAGE_KEY, payload)
   }
 
-  // Update the selectTab method to ensure selectedTabIndex is tracked
   selectTab(index: number) {
     this.selectedTabIndex = index;
 
@@ -333,7 +339,6 @@ export class EnginesComponent {
     });
   }
 
-  // Add this method to handle legend data changes
   onLegendDataChanged(legendData: any[]) {
     this.currentLegendData = legendData;
   }
@@ -344,7 +349,6 @@ export class EnginesComponent {
       return
     }
 
-    // Disconnect any existing connection first (but don't clear job references)
     if (this.realtimeJobSubscription) {
       this.realtimeJobSubscription.unsubscribe()
       this.realtimeJobSubscription = null
@@ -353,15 +357,12 @@ export class EnginesComponent {
       this.aggregator.disconnect()
     }
 
-    // Connect to the job's WebSocket
     this.aggregator.connect(job.host, job.port)
 
-    // Subscribe to job events AFTER the job reference is set
     this.realtimeJobSubscription = this.aggregator.getEventEmitter().subscribe((data) => {
       this._handleJobUpdate(data)
     })
 
-    // Subscribe to the specific job - this triggers immediate update
     this.aggregator.subscribeJob(job.job_id)
   }
 
@@ -418,7 +419,6 @@ export class EnginesComponent {
       summaryUpdate = data['update']['summary']
     }
 
-    // Apply all updates synchronously in the correct order
     if (perspectiveUpdate) {
       this.diagramPerspectives = perspectiveUpdate
     }
@@ -432,7 +432,7 @@ export class EnginesComponent {
     }
 
     // Apply overlays to graphics after a short delay to ensure BPMN is ready
-    if (overlayUpdate && overlayUpdate.length > 0) {
+    if (overlayUpdate && overlayUpdate.length > 0 && !this.overlayApplicationInProgress) {
       setTimeout(() => {
         this.applyOverlaysToGraphics()
       }, 300)
