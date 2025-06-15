@@ -129,6 +129,7 @@ export class EnginesComponent {
 
     this.loadingService.setLoadningState(true)
     this._disconnectCurrentJob()
+    this.clearAllCumulativeData()
 
     this.diagramPerspectives = []
     this.diagramOverlays = []
@@ -190,6 +191,8 @@ export class EnginesComponent {
     this.isResult = false
 
     this._disconnectCurrentJob()
+
+    this.clearAllCumulativeData()
 
     this.diagramPerspectives = []
     this.diagramOverlays = []
@@ -263,6 +266,8 @@ export class EnginesComponent {
     if (this.currentBpmnJob || this.currentAggregationJob) {
       this._disconnectCurrentJob()
     }
+
+    this.clearAllCumulativeData()
 
     this.diagramPerspectives = []
     this.diagramOverlays = []
@@ -534,5 +539,11 @@ export class EnginesComponent {
 
   getInstanceSeverityClass(deviationCount: number): string {
     return deviationCount === 0 ? 'has-no-deviations' : 'has-deviations';
+  }
+
+  private clearAllCumulativeData() {
+    this.bpmnDiagrams?.forEach(diagram => {
+      diagram.clearCumulativeData();
+    });
   }
 }

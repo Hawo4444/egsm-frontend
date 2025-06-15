@@ -20,8 +20,8 @@ import { BaseBpmnComponent } from './base-bpmn.component';
   styleUrls: ['./bpmn.component.scss'],
 })
 export class BpmnComponent extends BaseBpmnComponent implements AfterContentInit {
-  cumulativeOverlaps = new Map();
-  cumulativeIterations = new Map();
+  cumulativeOverlaps = new Map<string, Set<string>>();
+  cumulativeIterations = new Map<string, Set<number>>();
   blockStatistics = new Map();
   flagCounts = new Map();
 
@@ -44,6 +44,12 @@ export class BpmnComponent extends BaseBpmnComponent implements AfterContentInit
 
   protected override onModelClear(): void {
     this.blockStatistics.clear();
+    this.cumulativeOverlaps.clear();
+    this.cumulativeIterations.clear();
+    this.flagCounts.clear();
+  }
+
+  clearCumulativeData(): void {
     this.cumulativeOverlaps.clear();
     this.cumulativeIterations.clear();
     this.flagCounts.clear();
@@ -103,8 +109,6 @@ export class BpmnComponent extends BaseBpmnComponent implements AfterContentInit
   }
 
   applyOverlayReport(overlayreport: BpmnBlockOverlayReport[]) {
-    this.cumulativeOverlaps.clear();
-    this.cumulativeIterations.clear();
 
     overlayreport.forEach(element => {
       if (this.blockProperties.has(element.block_id)) {
@@ -159,20 +163,26 @@ export class BpmnComponent extends BaseBpmnComponent implements AfterContentInit
     }
   }
 
-  private generateOverlapHtml(flag: { deviation: string, details: any }, iterationText: string): string {
-    const elementId = flag.details.elementId || '';
-    const currentOverlaps = flag.details?.over?.map(id => this.getElementNameById(id)) ?? [];
-
-    const overlapText = currentOverlaps.join('\n');
-    return `<img src="assets/arrows.png" title="Overlaps:\n${overlapText}${iterationText}" style="transform: rotate(90deg); width:25px; height:25px;">`;
-  }
-
   protected override generateIconHtml(flag: { deviation: string, details: any }): string {
+    const elementId = flag.details.elementId || '';
     const hasIteration = flag.details.iterationIndex !== undefined && flag.details.iterationIndex !== -1;
+    
     let iterationText = '';
-
     if (hasIteration) {
-      iterationText = `\nIteration ${flag.details.iterationIndex + 1}`;
+      const cumulativeKey = `${elementId}_${flag.deviation}`;
+      if (!this.cumulativeIterations.has(cumulativeKey)) {
+        this.cumulativeIterations.set(cumulativeKey, new Set<number>());
+      }
+      
+      const cumulativeIterationSet = this.cumulativeIterations.get(cumulativeKey)!;
+      cumulativeIterationSet.add(flag.details.iterationIndex + 1);
+      
+      const allIterations = Array.from(cumulativeIterationSet).sort((a, b) => a - b);
+      if (allIterations.length === 1) {
+        iterationText = `\nIteration ${allIterations[0]}`;
+      } else {
+        iterationText = `\nIterations ${allIterations.join(', ')}`;
+      }
     }
 
     switch (flag.deviation) {
@@ -192,6 +202,24 @@ export class BpmnComponent extends BaseBpmnComponent implements AfterContentInit
       default:
         return '';
     }
+  }
+
+  private generateOverlapHtml(flag: { deviation: string, details: any }, iterationText: string): string {
+    const elementId = flag.details.elementId || '';
+    const currentOverlaps = flag.details?.over?.map(id => this.getElementNameById(id)) ?? [];
+
+    const cumulativeKey = `${elementId}_overlap`;
+    if (!this.cumulativeOverlaps.has(cumulativeKey)) {
+      this.cumulativeOverlaps.set(cumulativeKey, new Set<string>());
+    }
+    
+    const cumulativeOverlapSet = this.cumulativeOverlaps.get(cumulativeKey)!;
+    currentOverlaps.forEach(overlap => cumulativeOverlapSet.add(overlap));
+    
+    const allOverlaps = Array.from(cumulativeOverlapSet);
+    const overlapText = allOverlaps.join('\n');
+    
+    return `<img src="assets/arrows.png" title="Overlaps:\n${overlapText}${iterationText}" style="transform: rotate(90deg); width:25px; height:25px;">`;
   }
 
   addFlagToOverlay(elementId: string, flag: { deviation: string, details: any }) {
